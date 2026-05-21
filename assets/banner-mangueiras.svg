@@ -1,0 +1,10 @@
+<svg width="1200" height="540" viewBox="0 0 1200 540" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1D4ED8"/><stop offset=".55" stop-color="#0EA5E9"/><stop offset="1" stop-color="#22C55E"/></linearGradient></defs>
+  <rect width="1200" height="540" fill="url(#g)"/>
+  <rect x="720" y="-70" width="420" height="420" rx="80" fill="white" opacity=".12" transform="rotate(14 720 -70)"/>
+  <path d="M0 410C230 310 400 420 620 350C810 290 920 250 1200 310V540H0Z" fill="#082F49" opacity=".32"/>
+  <text x="70" y="175" font-family="Arial" font-size="60" font-weight="800" fill="white">Meia das Mangueiras</text>
+  <text x="74" y="230" font-family="Arial" font-size="28" fill="white" opacity=".9">21K, 10K e caminhada • Belém/PA</text>
+  <rect x="74" y="280" width="210" height="54" rx="27" fill="white" opacity=".95"/>
+  <text x="105" y="315" font-family="Arial" font-size="22" font-weight="700" fill="#1D4ED8">Lote promocional</text>
+</svg>
