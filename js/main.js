@@ -458,21 +458,45 @@ function renderAuth(type) {
   const isLogin = type === 'login';
   const athlete = getAthlete();
   root.innerHTML = `
-    <div class="container auth-wrap">
-      <form class="auth-card" id="authForm">
-        <h1>${isLogin ? 'Entrar' : 'Criar conta'}</h1>
-        <p>${isLogin ? 'Acesse a área do atleta e acompanhe suas inscrições.' : 'Crie seu cadastro para participar dos eventos.'}</p>
-        <div class="form-grid">
-          ${!isLogin ? `<div class="field full"><label>Nome completo</label><input class="input" name="name" required placeholder="Seu nome" value="${athlete?.name || ''}"></div>` : ''}
-          <div class="field full"><label>E-mail</label><input class="input" name="email" required type="email" placeholder="voce@email.com" value="${athlete?.email || ''}"></div>
-          ${!isLogin ? `<div class="field full"><label>Telefone</label><input class="input" name="phone" required placeholder="(91) 99999-0000" value="${athlete?.phone || ''}"></div><div class="field full"><label>Cidade/UF</label><input class="input" name="city" required placeholder="Belém/PA" value="${athlete?.city || DEMO_USER.city}"></div>` : ''}
-          <div class="field full"><label>Senha</label><input class="input" name="password" required type="password" placeholder="••••••••"></div>
+    <div class="auth-page ${isLogin ? 'auth-page-login' : 'auth-page-signup'}">
+      <section class="auth-visual" aria-label="ChipBelem">
+        <a class="auth-brand" href="index.html" aria-label="Voltar para o início">
+          <img src="assets/logo_chip.png" alt="ChipBelem">
+        </a>
+        <div class="auth-visual-content">
+          <span class="auth-kicker">Portal do atleta</span>
+          <h1>${isLogin ? 'Acesse sua conta' : 'Crie sua conta de atleta'}</h1>
+          <p>${isLogin ? 'Entre para acompanhar inscrições, comprovantes e próximas corridas em um só lugar.' : 'Cadastre seus dados uma vez e agilize suas inscrições nos próximos eventos.'}</p>
+          <div class="auth-visual-stats">
+            <div><strong>${EVENTS.length}</strong><span>eventos</span></div>
+            <div><strong>24h</strong><span>online</span></div>
+            <div><strong>100%</strong><span>demo</span></div>
+          </div>
         </div>
-        <button class="btn btn-primary btn-block" type="submit" style="margin-top:16px;">${isLogin ? 'Entrar' : athlete ? 'Salvar perfil' : 'Cadastrar atleta'}</button>
-        <div class="auth-links">
-          ${isLogin ? '<a href="cadastro.html">Criar uma conta</a><a href="#">Esqueci minha senha</a>' : '<a href="login.html">Já tenho conta</a><a href="eventos.html">Ver eventos</a>'}
-        </div>
-      </form>
+      </section>
+
+      <section class="auth-panel" aria-label="${isLogin ? 'Formulário de login' : 'Formulário de cadastro'}">
+        <form class="auth-card" id="authForm">
+          <div class="auth-card-head">
+            <span>${isLogin ? 'Login' : 'Cadastro'}</span>
+            <h2>${isLogin ? 'Bem-vindo de volta' : 'Dados do atleta'}</h2>
+            <p>${isLogin ? 'Use seu e-mail e senha para entrar na área do atleta.' : 'Preencha seus dados para participar dos eventos.'}</p>
+          </div>
+          <div class="form-grid">
+            ${!isLogin ? `<div class="field full"><label>Nome completo</label><input class="input" name="name" required placeholder="Seu nome" value="${athlete?.name || ''}"></div>` : ''}
+            <div class="field full"><label>E-mail</label><input class="input" name="email" required type="email" placeholder="voce@email.com" value="${athlete?.email || ''}"></div>
+            ${!isLogin ? `<div class="field full"><label>Telefone</label><input class="input" name="phone" required placeholder="(91) 99999-0000" value="${athlete?.phone || ''}"></div><div class="field full"><label>Cidade/UF</label><input class="input" name="city" required placeholder="Belém/PA" value="${athlete?.city || DEMO_USER.city}"></div>` : ''}
+            <div class="field full"><label>Senha</label><input class="input" name="password" required type="password" placeholder="••••••••"></div>
+          </div>
+          ${isLogin ? '<div class="auth-help-row"><label><input type="checkbox" checked> Lembrar acesso</label><a href="#">Esqueci minha senha</a></div>' : ''}
+          <button class="btn btn-primary btn-block auth-submit" type="submit">${isLogin ? 'Entrar' : athlete ? 'Salvar perfil' : 'Cadastrar atleta'}</button>
+          <div class="auth-divider"><span>ou</span></div>
+          <div class="auth-links">
+            ${isLogin ? '<span>Ainda não tem cadastro?</span><a href="cadastro.html">Criar conta</a>' : '<span>Já possui cadastro?</span><a href="login.html">Entrar agora</a>'}
+          </div>
+          <a class="auth-back-link" href="eventos.html">Ver eventos disponíveis</a>
+        </form>
+      </section>
     </div>`;
   document.querySelector('#authForm').addEventListener('submit', (e) => {
     e.preventDefault();
