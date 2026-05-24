@@ -3,6 +3,8 @@ const dateBR = (date) => new Date(date + 'T12:00:00').toLocaleDateString('pt-BR'
 const dateShortBR = (date) => new Date(date + 'T12:00:00').toLocaleDateString('pt-BR');
 const AUTH_KEY = 'chipbelem_athlete';
 const REGISTRATION_KEY = 'correja_registrations';
+const ORGANIZER_EVENTS_KEY = 'chipbelem_organizer_events';
+const ORGANIZER_AUTH_KEY = 'chipbelem_organizer';
 
 function statusClass(status) {
   if (status === 'open') return 'open';
@@ -59,6 +61,7 @@ function buildLayout() {
             <a href="index.html" class="${page === 'index.html' ? 'active' : ''}">Início</a>
             <a href="eventos.html" class="${page === 'eventos.html' || page === 'evento.html' ? 'active' : ''}">Eventos</a>
             <a href="minhas-inscricoes.html" class="${page === 'minhas-inscricoes.html' ? 'active' : ''}">Área do atleta</a>
+            <a href="organizador.html" class="${page === 'organizador.html' ? 'active' : ''}">Organizador</a>
           </nav>
           <div class="nav-actions">
             ${athlete ? `
@@ -277,6 +280,42 @@ function saveRegistration(registration) {
   const items = getRegistrations();
   items.unshift(registration);
   localStorage.setItem(REGISTRATION_KEY, JSON.stringify(items));
+}
+
+function getOrganizerEvents() {
+  try { return JSON.parse(localStorage.getItem(ORGANIZER_EVENTS_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveOrganizerEvent(event) {
+  const items = getOrganizerEvents();
+  items.unshift(event);
+  localStorage.setItem(ORGANIZER_EVENTS_KEY, JSON.stringify(items));
+}
+
+function getOrganizer() {
+  try { return JSON.parse(localStorage.getItem(ORGANIZER_AUTH_KEY) || 'null'); }
+  catch { return null; }
+}
+
+function saveOrganizer(organizer) {
+  localStorage.setItem(ORGANIZER_AUTH_KEY, JSON.stringify(organizer));
+}
+
+function logoutOrganizer() {
+  localStorage.removeItem(ORGANIZER_AUTH_KEY);
+  showToast('Você saiu do painel do organizador.');
+  renderOrganizer();
+}
+
+function estimateRouteKm(startLat, startLng, finishLat, finishLng) {
+  const values = [startLat, startLng, finishLat, finishLng].map(Number);
+  if (values.some(value => !Number.isFinite(value))) return null;
+  const [lat1, lng1, lat2, lng2] = values.map(value => value * Math.PI / 180);
+  const dLat = lat2 - lat1;
+  const dLng = lng2 - lng1;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function renderCheckout() {
@@ -517,6 +556,303 @@ function renderAuth(type) {
   });
 }
 
+function organizerInfoSections() {
+  const tools = [
+    ['↗', 'Evento publicado no ChipBelém', 'Cadastre banner, data, local, valores e deixe a corrida pronta para divulgação.'],
+    ['🔒', 'Cadastro do atleta organizado', 'Dados pessoais, percurso, camisa e contato ficam reunidos em um fluxo simples.'],
+    ['⌁', 'Inscritos em tempo real', 'Acompanhe os rascunhos e prepare a base de inscritos para operação do evento.'],
+    ['◴', 'Inscrição nativa ou externa', 'Use o formulário do ChipBelém ou direcione o atleta para um link de outro site.'],
+    ['$', 'Pagamentos configuráveis', 'Prepare Pix, cartão, boleto e credenciais do Mercado Pago para a cobrança.'],
+    ['✉', 'Evento em destaque', 'A corrida aparece com imagem, status, cidade, data e chamada para inscrição.'],
+    ['🛒', 'Fluxo de inscrição completo', 'O atleta escolhe o evento, preenche os dados e acompanha tudo na área do atleta.'],
+    ['▣', 'Painel do organizador', 'Crie eventos, revise informações e acompanhe os rascunhos salvos no painel.']
+  ];
+  const payments = [
+    ['◆', 'Pix', 'Pagamento rápido para confirmar inscrições com mais agilidade.'],
+    ['▱', 'Cartão de Crédito', 'Opção para cobrança online integrada ao fluxo do evento.'],
+    ['▬', 'Boleto', 'Alternativa para atletas que preferem pagamento bancário.'],
+    ['▣', 'Mercado Pago', 'Campos preparados para Public Key, token/API e webhook de notificação.']
+  ];
+
+  return `
+    <section class="container organizer-info" id="ferramentas">
+      <div class="organizer-info-head">
+        <h2>Ferramentas do ChipBelém para organizadores</h2>
+        <p>Do cadastro do evento à inscrição do atleta, o ChipBelém centraliza as etapas principais para divulgar e operar corridas.</p>
+      </div>
+      <div class="organizer-tool-grid">
+        ${tools.map(item => `<article class="organizer-tool"><span>${item[0]}</span><h3>${item[1]}</h3><p>${item[2]}</p></article>`).join('')}
+      </div>
+
+      <div class="organizer-info-head">
+        <h2>Pagamento preparado para sua operação</h2>
+        <p>O painel já considera as formas de pagamento mais usadas em inscrições esportivas e deixa espaço para integração com Mercado Pago.</p>
+      </div>
+      <div class="organizer-payment-grid">
+        ${payments.map(item => `<article class="organizer-tool"><span>${item[0]}</span><h3>${item[1]}</h3><p>${item[2]}</p></article>`).join('')}
+      </div>
+
+      <div class="organizer-info-head">
+        <h2>Modelo simples para publicar corridas</h2>
+        <p>O objetivo do ChipBelém é facilitar a divulgação, o cadastro e a gestão inicial de eventos esportivos.</p>
+      </div>
+      <div class="organizer-price-grid">
+        <article class="organizer-price-card"><h3>Eventos Gratuitos</h3><p>Cadastre eventos sem cobrança e use a página pública para divulgação.</p></article>
+        <article class="organizer-price-card featured"><h3>Eventos Pagos</h3><p>Configure valor base, métodos de pagamento e dados da API do Mercado Pago.</p><strong>sob consulta</strong></article>
+        <article class="organizer-price-card"><h3>ChipBelém Pro</h3><p>Estrutura planejada para relatórios, repasses e integrações avançadas.</p></article>
+      </div>
+
+      <div class="organizer-info-head">
+        <h2>O que o ChipBelém já reúne</h2>
+        <p>Este projeto demonstra uma plataforma completa para eventos, atletas, inscrições e organização de corridas.</p>
+      </div>
+      <div class="organizer-history-grid">
+        <div><strong>${EVENTS.length}</strong><span>Eventos no calendário</span></div>
+        <div><strong>2</strong><span>Áreas de acesso</span></div>
+        <div><strong>4</strong><span>Formas de pagamento previstas</span></div>
+        <div><strong>100%</strong><span>Fluxo demonstrativo online</span></div>
+      </div>
+    </section>`;
+}
+
+function organizerCreateSection(createdEvents, organizer) {
+  return `
+    <section class="container page organizer-page" id="criar-evento">
+      <div class="section-head" style="margin-top:0;">
+        <div>
+          <span class="eyebrow">Painel do organizador</span>
+          <h2>Cadastro do evento</h2>
+          <p>${organizer.name}, preencha as informações principais para preparar a publicação da corrida.</p>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <span class="badge info">${createdEvents.length} rascunho(s)</span>
+          <button class="btn btn-outline btn-small" type="button" id="organizerLogout">Sair</button>
+        </div>
+      </div>
+
+      <div class="organizer-create-layout">
+        <form class="card organizer-form" id="organizerEventForm">
+          <h3>Informações do evento</h3>
+          <div class="form-grid">
+            <div class="field full"><label>Nome do evento</label><input class="input" name="eventName" required placeholder="Ex: Corrida Cidade Verde 2026"></div>
+            <div class="field"><label>Data</label><input class="input" name="eventDate" required type="date"></div>
+            <div class="field"><label>Horário de largada</label><input class="input" name="eventTime" required type="time"></div>
+            <div class="field"><label>Cidade/UF</label><input class="input" name="eventCity" required placeholder="Belém/PA"></div>
+            <div class="field"><label>Limite de inscrições</label><input class="input" name="eventSlots" type="number" min="1" placeholder="1000"></div>
+            <div class="field full"><label>Banner do evento</label><input class="input" id="eventBannerInput" name="eventBanner" type="file" accept="image/*"></div>
+          </div>
+
+          <h3>Inscrições</h3>
+          <div class="form-grid">
+            <div class="field"><label>Modo de inscrição</label><select class="select" name="registrationMode" id="registrationMode"><option value="native">Nativo pelo nosso site</option><option value="external">Link de outro site</option></select></div>
+            <div class="field"><label>Valor base</label><input class="input" name="eventPrice" type="number" min="0" step="0.01" placeholder="135.00"></div>
+            <div class="field full is-hidden" id="externalUrlField"><label>Link de inscrição externa</label><input class="input" name="externalUrl" type="url" placeholder="https://site-do-organizador.com/inscricao"></div>
+          </div>
+
+          <h3>Pagamento Mercado Pago</h3>
+          <div class="form-grid">
+            <div class="field full"><label>Public Key</label><input class="input" name="mercadoPagoPublicKey" placeholder="APP_USR-..."></div>
+            <div class="field full"><label>Access Token / API</label><input class="input" name="mercadoPagoToken" type="password" placeholder="Configure em ambiente seguro"></div>
+            <div class="field full"><label>Webhook de notificação</label><input class="input" name="mercadoPagoWebhook" type="url" placeholder="https://seusite.com/api/mercadopago/webhook"></div>
+            <div class="field full">
+              <label>Formas de pagamento</label>
+              <div class="checkbox-grid">
+                <label><input type="checkbox" name="paymentMethods" value="Pix" checked> Pix</label>
+                <label><input type="checkbox" name="paymentMethods" value="Cartão de crédito" checked> Cartão de crédito</label>
+                <label><input type="checkbox" name="paymentMethods" value="Boleto"> Boleto</label>
+              </div>
+            </div>
+          </div>
+
+          <h3>Percurso</h3>
+          <div class="form-grid">
+            <div class="field full"><label>Ponto de partida</label><input class="input" name="routeStart" required placeholder="Ex: Portal da Amazônia"></div>
+            <div class="field full"><label>Ponto de chegada</label><input class="input" name="routeFinish" required placeholder="Ex: Estação das Docas"></div>
+            <div class="field"><label>KM do evento</label><input class="input" id="eventDistanceKm" name="distanceKm" type="number" min="0" step="0.01" placeholder="5.00"></div>
+            <div class="field" style="justify-content:end;"><button class="btn btn-outline" id="calculateRouteBtn" type="button">Calcular por coordenadas</button></div>
+            <div class="field"><label>Latitude da partida</label><input class="input" id="startLat" type="number" step="any" placeholder="-1.4558"></div>
+            <div class="field"><label>Longitude da partida</label><input class="input" id="startLng" type="number" step="any" placeholder="-48.5044"></div>
+            <div class="field"><label>Latitude da chegada</label><input class="input" id="finishLat" type="number" step="any" placeholder="-1.4500"></div>
+            <div class="field"><label>Longitude da chegada</label><input class="input" id="finishLng" type="number" step="any" placeholder="-48.4900"></div>
+            <div class="field full"><label>Observações do percurso</label><textarea class="textarea" name="routeNotes" placeholder="Pontos de hidratação, retornos, trechos fechados e orientação da prova."></textarea></div>
+          </div>
+
+          <div class="route-estimate" id="routeEstimate">Informe as coordenadas para gerar uma estimativa em linha reta. O percurso oficial pode ser ajustado manualmente.</div>
+          <button class="btn btn-primary btn-block" type="submit">Salvar rascunho do evento</button>
+        </form>
+
+        <aside class="organizer-preview">
+          <div class="card">
+            <h3>Prévia do banner</h3>
+            <img id="bannerPreview" src="assets/bg-index.jpg" alt="Prévia do banner do evento">
+            <p>O banner aparecerá na página pública do evento e nos cards de divulgação.</p>
+          </div>
+          <div class="card">
+            <h3>Eventos criados</h3>
+            <div id="organizerEventsList">
+              ${createdEvents.length ? createdEvents.map(event => `
+                <article class="organizer-event-item">
+                  <img src="${event.banner || 'assets/bg-index.jpg'}" alt="${event.name}">
+                  <div>
+                    <strong>${event.name}</strong>
+                    <span>${dateShortBR(event.date)} • ${event.city || 'Cidade não informada'} • ${event.distanceKm || '0'}K</span>
+                    <small>${event.registrationMode === 'external' ? 'Inscrição externa' : 'Inscrição nativa'} • ${event.paymentMethods.join(', ') || 'Pagamento não definido'}</small>
+                  </div>
+                </article>`).join('') : '<div class="empty">Nenhum rascunho criado ainda.</div>'}
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>`;
+}
+
+function renderOrganizer() {
+  const root = document.querySelector('#organizerRoot');
+  if (!root) return;
+  const createdEvents = getOrganizerEvents();
+  const organizer = getOrganizer();
+
+  root.innerHTML = `
+    <section class="organizer-hero">
+      <div class="container organizer-hero-grid">
+        <div>
+          <span class="eyebrow">Organizadores</span>
+          <h1>Abra e gerencie seu evento de corrida</h1>
+          <p>Configure inscrições, pagamento, banner, percurso e divulgação em uma área feita para quem organiza provas esportivas.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="${organizer ? '#criar-evento' : '#organizerAccess'}">${organizer ? 'Criar evento' : 'Entrar para criar evento'}</a>
+            <a class="btn btn-outline" href="#ferramentas">Ver ferramentas</a>
+          </div>
+        </div>
+        ${organizer ? `
+          <div class="organizer-login-card">
+            <img src="assets/logo_chip.png" alt="ChipBelem">
+            <h2>Olá, ${organizer.name}</h2>
+            <p>Seu painel está liberado. Agora você pode criar rascunhos de eventos e configurar inscrições.</p>
+            <a class="btn btn-primary btn-block" href="#criar-evento">Criar novo evento</a>
+          </div>
+        ` : `
+          <div class="organizer-login-card" id="organizerAccess">
+            <img src="assets/logo_chip.png" alt="ChipBelem">
+            <div class="organizer-auth-tabs">
+              <button class="active" type="button" data-organizer-auth="login">Login</button>
+              <button type="button" data-organizer-auth="signup">Cadastro</button>
+            </div>
+            <form id="organizerLogin">
+              <h2>Login do organizador</h2>
+              <div class="field"><label>E-mail</label><input class="input" name="email" type="email" placeholder="organizador@email.com" required></div>
+              <div class="field"><label>Senha</label><input class="input" name="password" type="password" placeholder="••••••••" required></div>
+              <button class="btn btn-primary btn-block" type="submit">Entrar no painel</button>
+            </form>
+            <form class="is-hidden" id="organizerSignup">
+              <h2>Cadastro do organizador</h2>
+              <div class="field"><label>Nome da empresa</label><input class="input" name="company" placeholder="Nome da organização" required></div>
+              <div class="field"><label>Responsável</label><input class="input" name="name" placeholder="Seu nome" required></div>
+              <div class="field"><label>E-mail</label><input class="input" name="email" type="email" placeholder="organizador@email.com" required></div>
+              <div class="field"><label>Senha</label><input class="input" name="password" type="password" placeholder="••••••••" required></div>
+              <button class="btn btn-primary btn-block" type="submit">Criar conta</button>
+            </form>
+          </div>
+        `}
+      </div>
+    </section>
+
+    ${organizer ? organizerCreateSection(createdEvents, organizer) : organizerInfoSections()}`;
+
+  document.querySelectorAll('[data-organizer-auth]').forEach(button => {
+    button.addEventListener('click', () => {
+      const isLogin = button.dataset.organizerAuth === 'login';
+      document.querySelectorAll('[data-organizer-auth]').forEach(btn => btn.classList.toggle('active', btn === button));
+      document.querySelector('#organizerLogin')?.classList.toggle('is-hidden', !isLogin);
+      document.querySelector('#organizerSignup')?.classList.toggle('is-hidden', isLogin);
+    });
+  });
+
+  document.querySelector('#organizerLogin')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    saveOrganizer({ name: 'Organizador', email: form.get('email'), company: 'Equipe organizadora' });
+    showToast('Login do organizador realizado.');
+    renderOrganizer();
+  });
+
+  document.querySelector('#organizerSignup')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    saveOrganizer({ name: form.get('name'), email: form.get('email'), company: form.get('company') });
+    showToast('Cadastro do organizador criado.');
+    renderOrganizer();
+  });
+
+  document.querySelector('#organizerLogout')?.addEventListener('click', logoutOrganizer);
+
+  const form = document.querySelector('#organizerEventForm');
+  const bannerInput = document.querySelector('#eventBannerInput');
+  const bannerPreview = document.querySelector('#bannerPreview');
+  const modeSelect = document.querySelector('#registrationMode');
+  const externalUrlField = document.querySelector('#externalUrlField');
+  const distanceInput = document.querySelector('#eventDistanceKm');
+  const estimateBox = document.querySelector('#routeEstimate');
+
+  modeSelect?.addEventListener('change', () => {
+    externalUrlField?.classList.toggle('is-hidden', modeSelect.value !== 'external');
+  });
+
+  bannerInput?.addEventListener('change', () => {
+    const file = bannerInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      bannerPreview.src = reader.result;
+      bannerPreview.dataset.banner = reader.result;
+    });
+    reader.readAsDataURL(file);
+  });
+
+  document.querySelector('#calculateRouteBtn')?.addEventListener('click', () => {
+    const km = estimateRouteKm(
+      document.querySelector('#startLat')?.value,
+      document.querySelector('#startLng')?.value,
+      document.querySelector('#finishLat')?.value,
+      document.querySelector('#finishLng')?.value
+    );
+    if (!km) {
+      showToast('Preencha as quatro coordenadas para calcular.');
+      return;
+    }
+    distanceInput.value = km.toFixed(2);
+    estimateBox.textContent = `Estimativa calculada: ${km.toFixed(2)} km em linha reta. Ajuste o valor se o percurso oficial tiver curvas ou retornos.`;
+  });
+
+  form?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const formData = new FormData(form);
+    const eventDraft = {
+      id: 'org-' + Date.now(),
+      name: formData.get('eventName'),
+      date: formData.get('eventDate'),
+      time: formData.get('eventTime'),
+      city: formData.get('eventCity'),
+      slots: formData.get('eventSlots'),
+      banner: bannerPreview?.dataset.banner || 'assets/bg-index.jpg',
+      registrationMode: formData.get('registrationMode'),
+      externalUrl: formData.get('externalUrl'),
+      price: formData.get('eventPrice'),
+      mercadoPagoPublicKey: formData.get('mercadoPagoPublicKey'),
+      mercadoPagoWebhook: formData.get('mercadoPagoWebhook'),
+      paymentMethods: formData.getAll('paymentMethods'),
+      routeStart: formData.get('routeStart'),
+      routeFinish: formData.get('routeFinish'),
+      distanceKm: formData.get('distanceKm'),
+      routeNotes: formData.get('routeNotes'),
+      createdAt: new Date().toISOString()
+    };
+    saveOrganizerEvent(eventDraft);
+    showToast('Rascunho do evento salvo.');
+    renderOrganizer();
+  });
+}
+
 function renderAdmin() {
   const root = document.querySelector('#adminRoot');
   if (!root) return;
@@ -647,6 +983,7 @@ function init() {
   renderEventPage();
   renderCheckout();
   renderAthleteArea();
+  renderOrganizer();
   renderAdmin();
   if (document.body.dataset.page === 'login') renderAuth('login');
   if (document.body.dataset.page === 'cadastro') renderAuth('cadastro');
