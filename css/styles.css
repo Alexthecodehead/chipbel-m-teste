@@ -336,7 +336,7 @@ button { cursor: pointer; }
   grid-template-columns: minmax(360px, .92fr) minmax(360px, 1.08fr);
   background:
     linear-gradient(120deg, rgba(15,23,42,.9), rgba(15,23,42,.62)),
-    url("../assets/Corrida Da Amazônia.png") center/cover no-repeat;
+    url("../assets/bg-index.jpg") center/cover no-repeat;
 }
 .auth-visual {
   position:relative;
@@ -365,7 +365,8 @@ button { cursor: pointer; }
   width: 220px;
   padding: 14px 18px;
   border-radius: 14px;
-  background:#fff;
+  background:rgba(15,23,42,.86);
+  border:1px solid rgba(255,255,255,.16);
   box-shadow: 0 18px 42px rgba(0,0,0,.18);
 }
 .auth-brand img { width:100%; height:auto; }

@@ -470,7 +470,7 @@ function renderAuth(type) {
           <div class="auth-visual-stats">
             <div><strong>${EVENTS.length}</strong><span>eventos</span></div>
             <div><strong>24h</strong><span>online</span></div>
-            <div><strong>100%</strong><span>demo</span></div>
+            <div><strong>100%</strong><span>conectado</span></div>
           </div>
         </div>
       </section>
