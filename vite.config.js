@@ -19,7 +19,7 @@ const pages = [
 ];
 
 export default defineConfig({
-  base: '/chipbel-m-teste/',
+  base: process.env.GITHUB_PAGES === 'true' ? '/chipbel-m-teste/' : '/',
   plugins: [react()],
   build: {
     rollupOptions: {

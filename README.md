@@ -68,6 +68,28 @@ Este projeto usa Vite e precisa publicar a pasta `dist`, nao a raiz do repositor
 
 O `vite.config.js` esta configurado para o caminho publico `/chipbel-m-teste/`.
 
+## Publicar no Vercel
+
+O projeto tambem esta pronto para Vercel. O arquivo `vercel.json` define:
+
+- Framework: `vite`
+- Build command: `npm run build`
+- Output directory: `dist`
+
+Passos:
+
+1. Envie o projeto para o GitHub.
+2. Acesse `https://vercel.com`.
+3. Clique em `Add New > Project`.
+4. Importe o repositorio `chipbel-m-teste`.
+5. Confirme as configuracoes detectadas:
+   - Framework Preset: `Vite`
+   - Build Command: `npm run build`
+   - Output Directory: `dist`
+6. Clique em `Deploy`.
+
+No Vercel, o site usa caminho raiz `/`. No GitHub Pages, o workflow usa `GITHUB_PAGES=true` para manter `/chipbel-m-teste/`.
+
 ## Proximos passos para virar sistema real
 
 - Criar uma API para conectar o frontend ao PostgreSQL
