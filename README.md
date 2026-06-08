@@ -56,6 +56,17 @@ Para gerar a versao de producao:
 npm run build
 ```
 
+## Publicar no GitHub Pages
+
+Este projeto usa Vite e precisa publicar a pasta `dist`, nao a raiz do repositorio.
+
+1. Envie os arquivos para o GitHub.
+2. No repositorio, abra `Settings > Pages`.
+3. Em `Build and deployment`, selecione `GitHub Actions`.
+4. Faca um novo push ou rode manualmente o workflow `Deploy GitHub Pages`.
+
+O `vite.config.js` esta configurado para o caminho publico `/chipbel-m-teste/`.
+
 ## Proximos passos para virar sistema real
 
 - Criar uma API para conectar o frontend ao PostgreSQL

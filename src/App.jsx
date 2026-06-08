@@ -28,6 +28,11 @@ const getJSON = (key, fallback) => {
   catch { return fallback; }
 };
 const setJSON = (key, value) => localStorage.setItem(key, JSON.stringify(value));
+const assetUrl = (path = '') => {
+  const value = String(path);
+  if (/^(https?:|data:|blob:)/.test(value)) return value;
+  return `${import.meta.env.BASE_URL}${value.replace(/^\/+/, '')}`;
+};
 const normalizeEmail = (value = '') => String(value).trim().toLowerCase();
 const formatDateTime = (value) => value ? new Date(value).toLocaleString('pt-BR') : '-';
 const getStoredOrganizer = () => {
@@ -61,7 +66,7 @@ function Layout({ athlete, organizer, onAthleteLogout, children }) {
       <header>
         <div className="topbar">
           <div className="container nav">
-            <a className="logo" href="index.html" aria-label="ChipBelem"><img src="/assets/logo_chip.png" alt="ChipBelem" /></a>
+            <a className="logo" href="index.html" aria-label="ChipBelem"><img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" /></a>
             <nav className={`nav-links ${menuOpen ? 'open' : ''}`} id="navLinks">
               <a href="index.html" className={page === 'index.html' ? 'active' : ''}>Início</a>
               <a href="eventos.html" className={page === 'eventos.html' || page === 'evento.html' ? 'active' : ''}>Eventos</a>
@@ -88,7 +93,7 @@ function Layout({ athlete, organizer, onAthleteLogout, children }) {
       <footer className="footer">
         <div className="container footer-grid">
           <div>
-            <img src="/assets/logo_chip.png" alt="ChipBelem" />
+            <img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" />
             <p>Feito por Alexandre Durães.</p>
           </div>
         </div>
@@ -101,7 +106,7 @@ function EventCard({ event }) {
   return (
     <article className="event-card">
       <a className="event-media" href={`evento.html?evento=${event.slug}`} aria-label={`Ver detalhes de ${event.title}`}>
-        <img src={`/${event.image}`} alt={event.title} />
+        <img src={assetUrl(event.image)} alt={event.title} />
       </a>
       <div className="event-body">
         <h3 className="event-title"><a href={`evento.html?evento=${event.slug}`}>{event.title}</a></h3>
@@ -135,7 +140,7 @@ function HomePage() {
             </div>
           </div>
           <article className="hero-card">
-            <img src={`/${featured.image}`} alt={featured.title} />
+            <img src={assetUrl(featured.image)} alt={featured.title} />
             <div className="hero-card-body">
               <div className="hero-card-title">
                 <h3>{featured.title}</h3>
@@ -244,7 +249,7 @@ function EventDetailPage() {
     <main className="container page">
       <div className="breadcrumb"><a href="eventos.html">Eventos</a> / {event.title}</div>
       <article className="detail-hero">
-        <img src={`/${event.image}`} alt={event.title} />
+        <img src={assetUrl(event.image)} alt={event.title} />
         <div className="detail-content">
           <div>
             <span className={`badge ${statusClass(event.status)}`}>{event.badge}</span>
@@ -341,7 +346,7 @@ function CheckoutPage({ athlete, setAthlete, registrations, setRegistrations, to
         </form>
         <aside className="card order-summary">
           <h3>Resumo</h3>
-          <img src={`/${event.image}`} alt={event.title} style={{ borderRadius: 18, marginBottom: 14 }} />
+          <img src={assetUrl(event.image)} alt={event.title} style={{ borderRadius: 18, marginBottom: 14 }} />
           <div className="summary-line"><span>Evento</span><strong>{event.title}</strong></div>
           <div className="summary-line"><span>Data</span><strong>{dateBR(event.date)}</strong></div>
           <div className="summary-line"><span>Inscrição</span><strong>{money(basePrice)}</strong></div>
@@ -369,7 +374,7 @@ function AuthPage({ type, athlete, setAthlete, toast }) {
   return (
     <main className={`auth-page ${isLogin ? 'auth-page-login' : 'auth-page-signup'}`}>
       <section className="auth-visual" aria-label="ChipBelem">
-        <a className="auth-brand" href="index.html" aria-label="Voltar para o início"><img src="/assets/logo_chip.png" alt="ChipBelem" /></a>
+        <a className="auth-brand" href="index.html" aria-label="Voltar para o início"><img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" /></a>
         <div className="auth-visual-content">
           <span className="auth-kicker">Portal do atleta</span>
           <h1>{isLogin ? 'Acesse sua conta' : 'Crie sua conta de atleta'}</h1>
@@ -489,7 +494,7 @@ function OrganizerInfoSections() {
 
 function OrganizerCreateSection({ organizer, organizerEvents, setOrganizerEvents, toast }) {
   const [mode, setMode] = useState('native');
-  const [banner, setBanner] = useState('/assets/bg-index.jpg');
+  const [banner, setBanner] = useState(assetUrl('assets/bg-index.jpg'));
   const [distance, setDistance] = useState('');
   const [estimate, setEstimate] = useState('Informe as coordenadas para gerar uma estimativa em linha reta. O percurso oficial pode ser ajustado manualmente.');
   const submit = (e) => {
@@ -576,7 +581,7 @@ function OrganizerCreateSection({ organizer, organizerEvents, setOrganizerEvents
         </form>
         <aside className="organizer-preview">
           <div className="card"><h3>Prévia do banner</h3><img src={banner} alt="Prévia do banner do evento" /><p>O banner aparecerá na página pública do evento e nos cards de divulgação.</p></div>
-          <div className="card"><h3>Eventos criados</h3>{organizerEvents.length ? organizerEvents.map(event => <article className="organizer-event-item" key={event.id}><img src={event.banner || '/assets/bg-index.jpg'} alt={event.name} /><div><strong>{event.name}</strong><span>{dateShortBR(event.date)} • {event.city || 'Cidade não informada'} • {event.distanceKm || '0'}K</span><small>{event.registrationMode === 'external' ? 'Inscrição externa' : 'Inscrição nativa'} • {(event.paymentMethods || []).join(', ') || 'Pagamento não definido'}</small></div></article>) : <div className="empty">Nenhum rascunho criado ainda.</div>}</div>
+          <div className="card"><h3>Eventos criados</h3>{organizerEvents.length ? organizerEvents.map(event => <article className="organizer-event-item" key={event.id}><img src={assetUrl(event.banner || 'assets/bg-index.jpg')} alt={event.name} /><div><strong>{event.name}</strong><span>{dateShortBR(event.date)} • {event.city || 'Cidade não informada'} • {event.distanceKm || '0'}K</span><small>{event.registrationMode === 'external' ? 'Inscrição externa' : 'Inscrição nativa'} • {(event.paymentMethods || []).join(', ') || 'Pagamento não definido'}</small></div></article>) : <div className="empty">Nenhum rascunho criado ainda.</div>}</div>
         </aside>
       </div>
     </section>
@@ -644,10 +649,10 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
         <div className="container organizer-hero-grid">
           <div><span className="eyebrow">Organizadores</span><h1>Abra e gerencie seu evento de corrida</h1><p>Configure inscrições, pagamento, banner, percurso e divulgação em uma área feita para quem organiza provas esportivas.</p><div className="hero-actions"><a className="btn btn-primary" href={organizer ? '#criar-evento' : '#organizerAccess'}>{organizer ? 'Criar evento' : 'Entrar para criar evento'}</a><a className="btn btn-outline" href="#ferramentas">Ver ferramentas</a></div></div>
           {organizer ? (
-            <div className="organizer-login-card"><img src="/assets/logo_chip.png" alt="ChipBelem" /><h2>Olá, {organizer.name}</h2><p>Seu painel está liberado. Agora você pode criar rascunhos de eventos e configurar inscrições.</p><a className="btn btn-primary btn-block" href="#criar-evento">Criar novo evento</a><a className="btn btn-outline btn-block" style={{ marginTop: 10 }} href="admin.html">Entrar no painel administrativo</a></div>
+            <div className="organizer-login-card"><img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" /><h2>Olá, {organizer.name}</h2><p>Seu painel está liberado. Agora você pode criar rascunhos de eventos e configurar inscrições.</p><a className="btn btn-primary btn-block" href="#criar-evento">Criar novo evento</a><a className="btn btn-outline btn-block" style={{ marginTop: 10 }} href="admin.html">Entrar no painel administrativo</a></div>
           ) : (
             <div className="organizer-login-card" id="organizerAccess">
-              <img src="/assets/logo_chip.png" alt="ChipBelem" />
+              <img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" />
               <div className="organizer-auth-tabs"><button className={authMode === 'login' ? 'active' : ''} type="button" onClick={() => setAuthMode('login')}>Login</button><button className={authMode === 'signup' ? 'active' : ''} type="button" onClick={() => setAuthMode('signup')}>Cadastro</button></div>
               {authMode === 'login' ? <form onSubmit={submitLogin}><h2>Login do organizador</h2><div className="field"><label>Login ou e-mail</label><input className="input" name="login" type="text" placeholder="Admin ou organizador@email.com" required /></div><div className="field"><label>Senha</label><input className="input" name="password" type="password" placeholder="••••••••" required /></div><button className="btn btn-primary btn-block" type="submit">Entrar no painel</button></form> : <form onSubmit={submitSignup}><h2>Solicitar conta de organizador</h2><div className="field"><label>Nome da empresa</label><input className="input" name="company" placeholder="Nome da organização" required /></div><div className="field"><label>Responsável</label><input className="input" name="name" placeholder="Seu nome" required /></div><div className="field"><label>E-mail</label><input className="input" name="email" type="email" placeholder="organizador@email.com" required /></div><div className="field"><label>Senha</label><input className="input" name="password" type="password" placeholder="••••••••" required /></div><button className="btn btn-primary btn-block" type="submit">Enviar pedido</button></form>}
             </div>
