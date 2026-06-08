@@ -745,7 +745,7 @@ button { cursor: pointer; }
 .avatar { width:82px; height:82px; border-radius:28px; background:linear-gradient(135deg,#22c55e,#0ea5e9); color:#fff; font-size:32px; font-weight:900; display:grid; place-items:center; margin: 0 auto 14px; }
 .stat-grid { display:grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin: 18px 0; }
 #performance.stat-grid { grid-template-columns: repeat(2,1fr); }
-.stat { background:#f8fafc; border:1px solid var(--line); border-radius:18px; padding:16px; }
+.stat { display:block; background:#f8fafc; border:1px solid var(--line); border-radius:18px; padding:16px; }
 .stat strong { display:block; font-size:27px; }
 .stat span { color:var(--muted); font-weight:800; font-size:12px; }
 .ticket { border:1px solid var(--line); border-radius:20px; padding:17px; display:grid; grid-template-columns: 1fr auto; gap:14px; background:#fff; margin-bottom:12px; }
@@ -768,6 +768,21 @@ button { cursor: pointer; }
 .kpi span { color:var(--muted); font-weight:800; font-size:12px; }
 .kpi strong { display:block; font-size:30px; letter-spacing:-.04em; }
 .table-wrap { overflow:auto; }
+.access-denied { max-width:720px; margin:0 auto; text-align:center; }
+.access-denied p, .admin-role-note { color:var(--muted); }
+.approval-list { display:grid; gap:12px; margin-top:14px; }
+.approval-card {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:#f8fafc;
+}
+.approval-card strong, .approval-card span, .approval-card small { display:block; }
+.approval-card span, .approval-card small { color:var(--muted); }
 
 .empty { text-align:center; padding: 34px; color:var(--muted); background:#fff; border:1px dashed #cbd5e1; border-radius:22px; }
 
@@ -830,6 +845,7 @@ button { cursor: pointer; }
   .organizer-info { padding: 38px 0 48px; }
   .checkbox-grid { grid-template-columns: 1fr; }
   .event-grid, .athlete-event-grid, .steps, .filters, .form-grid, .stat-grid, .admin-cards, .info-grid { grid-template-columns: 1fr; }
+  .approval-card { align-items:flex-start; flex-direction:column; }
   .section-head { align-items:flex-start; flex-direction:column; }
   .event-footer { align-items:flex-start; flex-direction:column; }
   .detail-hero img { aspect-ratio: 16/9; }

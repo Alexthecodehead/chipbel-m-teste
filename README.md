@@ -1,35 +1,66 @@
-# ChipBelem — Frontend demonstrativo para inscrição em corridas
+# ChipBelem - Plataforma demo de corridas
 
-Este projeto é um frontend estático demonstrativo inspirado em plataformas de inscrição em corridas.
+Este projeto e uma base demonstrativa para inscricoes em corridas, area do atleta, area do organizador e painel administrativo.
 
 ## O que vem no projeto
 
-- Página inicial
+- Aplicacao React com Vite
+- Pagina inicial
 - Lista de eventos com filtros
-- Página individual do evento
-- Checkout/inscrição demonstrativa
+- Pagina individual do evento
+- Checkout/inscricao demonstrativa
 - Login e cadastro demonstrativos
-- Área do atleta
-- Painel administrativo demo
-- Exportação CSV demonstrativa dos inscritos
-- Dados fictícios em `js/data.js`
-- Inscrições salvas no `localStorage` do navegador
+- Area do atleta
+- Area do organizador
+- Painel administrativo com paginas proprias
+- Protecao do organizador por conta base e aprovacao de novos pedidos
+- Exportacao CSV demonstrativa dos inscritos
+- Dados ficticios em `src/data.js`
+- Estado temporario salvo no `localStorage`
 
-## Como abrir
+## Banco de dados
 
-Basta abrir o arquivo `index.html` no navegador.
+O projeto inclui um desenho inicial de PostgreSQL em `database/schema.sql`, dados base em `database/seed.sql` e guia de evolucao em `docs/postgresql-backend.md`.
 
-Se preferir usar um servidor local no VS Code, instale a extensão **Live Server** e clique com o botão direito no `index.html` > **Open with Live Server**.
+## Conta base da demo
 
-## Próximos passos para virar sistema real
+- Login: `Admin`
+- E-mail: `Alexandre.duraes.soares@gmail.com`
+- Senha: `Tecprime@123`
 
-- Conectar com Supabase Auth
-- Criar tabelas de eventos, inscrições e pagamentos
-- Subir imagens para Supabase Storage
-- Integrar pagamento com Mercado Pago, Asaas ou Pagar.me
-- Criar autenticação real para atletas e administradores
+Novos organizadores enviados pela tela de cadastro ficam pendentes ate a aprovacao em `Painel admin > Configuracoes`.
+
+## Como rodar
+
+Instale as dependencias:
+
+```bash
+npm install
+```
+
+Inicie o servidor local:
+
+```bash
+npm run dev
+```
+
+Abra:
+
+```text
+http://127.0.0.1:5173/index.html
+```
+
+Para gerar a versao de producao:
+
+```bash
+npm run build
+```
+
+## Proximos passos para virar sistema real
+
+- Criar uma API para conectar o frontend ao PostgreSQL
+- Migrar eventos, inscricoes e pagamentos para o banco
+- Subir imagens para storage ou pasta publica controlada
+- Integrar pagamento com Mercado Pago
+- Criar autenticacao real para atletas, organizadores e administradores
 - Proteger painel admin com regras de acesso
-
-## Observação
-
-Este projeto não copia marca, logotipo ou layout exato de nenhuma plataforma existente. É uma base visual e funcional própria para demonstração.

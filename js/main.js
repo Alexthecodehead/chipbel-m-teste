@@ -51,6 +51,8 @@ function buildLayout() {
   const footer = document.querySelector('#site-footer');
   const page = currentPage();
   const athlete = getAthlete();
+  const organizer = getOrganizer();
+  const isAdminPage = page.startsWith('admin');
 
   if (header) {
     header.innerHTML = `
@@ -61,7 +63,6 @@ function buildLayout() {
             <a href="index.html" class="${page === 'index.html' ? 'active' : ''}">Início</a>
             <a href="eventos.html" class="${page === 'eventos.html' || page === 'evento.html' ? 'active' : ''}">Eventos</a>
             <a href="minhas-inscricoes.html" class="${page === 'minhas-inscricoes.html' ? 'active' : ''}">Área do atleta</a>
-            <a href="organizador.html" class="${page === 'organizador.html' ? 'active' : ''}">Organizador</a>
           </nav>
           <div class="nav-actions">
             ${athlete ? `
@@ -71,8 +72,8 @@ function buildLayout() {
               <button class="nav-account-link nav-logout" type="button" id="logoutBtn">Sair</button>
             ` : `
               <a class="btn btn-outline btn-small" href="login.html">Entrar</a>
-              <a class="btn btn-primary btn-small" href="eventos.html">Inscrever-se</a>
             `}
+            ${organizer ? `<a class="btn ${isAdminPage ? 'btn-dark' : 'btn-primary'} btn-small" href="admin.html">Painel admin</a>` : (!athlete ? `<a class="btn btn-primary btn-small" href="organizador.html">Organizador</a>` : '')}
             <button class="mobile-toggle" type="button" id="mobileToggle" aria-label="Abrir menu">☰</button>
           </div>
         </div>
@@ -626,6 +627,7 @@ function organizerCreateSection(createdEvents, organizer) {
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <span class="badge info">${createdEvents.length} rascunho(s)</span>
+          <a class="btn btn-dark btn-small" href="admin.html">Painel administrativo</a>
           <button class="btn btn-outline btn-small" type="button" id="organizerLogout">Sair</button>
         </div>
       </div>
@@ -730,6 +732,7 @@ function renderOrganizer() {
             <h2>Olá, ${organizer.name}</h2>
             <p>Seu painel está liberado. Agora você pode criar rascunhos de eventos e configurar inscrições.</p>
             <a class="btn btn-primary btn-block" href="#criar-evento">Criar novo evento</a>
+            <a class="btn btn-outline btn-block" style="margin-top:10px;" href="admin.html">Entrar no painel administrativo</a>
           </div>
         ` : `
           <div class="organizer-login-card" id="organizerAccess">
@@ -773,7 +776,7 @@ function renderOrganizer() {
     const form = new FormData(event.currentTarget);
     saveOrganizer({ name: 'Organizador', email: form.get('email'), company: 'Equipe organizadora' });
     showToast('Login do organizador realizado.');
-    renderOrganizer();
+    setTimeout(() => location.href = 'admin.html', 450);
   });
 
   document.querySelector('#organizerSignup')?.addEventListener('submit', (event) => {
@@ -781,7 +784,7 @@ function renderOrganizer() {
     const form = new FormData(event.currentTarget);
     saveOrganizer({ name: form.get('name'), email: form.get('email'), company: form.get('company') });
     showToast('Cadastro do organizador criado.');
-    renderOrganizer();
+    setTimeout(() => location.href = 'admin.html', 450);
   });
 
   document.querySelector('#organizerLogout')?.addEventListener('click', logoutOrganizer);
@@ -861,60 +864,147 @@ function renderAdmin() {
   const revenue = regs.reduce((sum, reg) => sum + Number(reg.amount || 0), 0);
   const totalSlots = 4200;
   const usedSlots = 1848 + regs.length;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const activeEvents = EVENTS.filter(event => new Date(event.date + 'T12:00:00') >= today).length;
+  const pastEvents = EVENTS.length - activeEvents;
+  const totalRevenue = 142380 + revenue;
+  const page = currentPage();
+  const organizer = getOrganizer();
+  const adminPages = {
+    'admin.html': {
+      key: 'dashboard',
+      title: 'Dashboard',
+      description: 'Visão geral de eventos, inscritos, receita e capacidade.'
+    },
+    'admin-eventos.html': {
+      key: 'eventos',
+      title: 'Eventos',
+      description: 'Gerencie eventos cadastrados e abra as páginas públicas.'
+    },
+    'admin-inscritos.html': {
+      key: 'inscritos',
+      title: 'Inscritos',
+      description: 'Acompanhe inscrições recentes e exporte a lista em CSV.'
+    },
+    'admin-financeiro.html': {
+      key: 'financeiro',
+      title: 'Financeiro',
+      description: 'Resumo financeiro demonstrativo das inscrições.'
+    },
+    'admin-configuracoes.html': {
+      key: 'config',
+      title: 'Configurações',
+      description: 'Dados do organizador e integrações do painel.'
+    }
+  };
+  const adminPage = adminPages[page] || adminPages['admin.html'];
+  const active = adminPage.key;
+
+  const dashboardContent = `
+    <div class="admin-cards" id="dashboard">
+      <div class="kpi"><span>Eventos ativos</span><strong>${activeEvents}</strong></div>
+      <div class="kpi"><span>Eventos passados</span><strong>${pastEvents}</strong></div>
+      <div class="kpi"><span>Rendimento total</span><strong>${money(totalRevenue)}</strong></div>
+      <div class="kpi"><span>Rendimento total</span><strong>${money(totalRevenue)}</strong></div>
+    </div>
+    <section class="card">
+      <h3>Atalhos rápidos</h3>
+      <div class="stat-grid">
+        <a class="stat" href="admin-eventos.html"><strong>Eventos</strong><span>ver calendário</span></a>
+        <a class="stat" href="admin-inscritos.html"><strong>Inscritos</strong><span>consultar atletas</span></a>
+        <a class="stat" href="admin-financeiro.html"><strong>Financeiro</strong><span>acompanhar valores</span></a>
+      </div>
+    </section>`;
+
+  const eventosContent = `
+    <section class="card" id="eventos">
+      <h3>Eventos</h3>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Evento</th><th>Cidade</th><th>Data</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody>${EVENTS.map(event => `<tr><td><strong>${event.title}</strong><br><small>${event.category}</small></td><td>${event.city}/${event.state}</td><td>${dateBR(event.date)}</td><td><span class="badge ${statusClass(event.status)}">${event.badge}</span></td><td><a class="btn btn-outline btn-small" href="evento.html?evento=${event.slug}">Abrir</a></td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </section>`;
+
+  const inscritosContent = `
+    <section class="card" id="inscritos">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;"><h3 style="margin:0;">Inscritos recentes</h3><button class="btn btn-outline btn-small" type="button" id="exportBtn">Exportar CSV</button></div>
+      <div class="table-wrap" style="margin-top:12px;">
+        <table class="data-table">
+          <thead><tr><th>Número</th><th>Atleta</th><th>Evento</th><th>Percurso</th><th>Valor</th><th>Status</th></tr></thead>
+          <tbody>${regs.map(reg => `<tr><td>${reg.id}</td><td><strong>${reg.name}</strong><br><small>${reg.email}</small></td><td>${reg.eventTitle}</td><td>${reg.distance}</td><td>${money(Number(reg.amount || 0))}</td><td><span class="badge warning">${reg.status}</span></td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </section>`;
+
+  const financeiroContent = `
+    <section class="card" id="financeiro">
+      <h3>Resumo financeiro</h3>
+      <div class="stat-grid">
+        <div class="stat"><strong>${money(revenue)}</strong><span>valor em inscrições</span></div>
+        <div class="stat"><strong>${regs.length}</strong><span>pagamentos pendentes</span></div>
+        <div class="stat"><strong>${money(regs.length ? revenue / regs.length : 0)}</strong><span>ticket médio</span></div>
+      </div>
+    </section>
+    <section class="card">
+      <h3>Pagamentos</h3>
+      <p style="color:var(--muted);margin-top:0;">Esta tela está preparada para receber dados reais do Mercado Pago, repasses e conciliação.</p>
+      <div class="stat-grid">
+        <div class="stat"><strong>Pix</strong><span>habilitado no cadastro</span></div>
+        <div class="stat"><strong>Cartão</strong><span>habilitado no cadastro</span></div>
+        <div class="stat"><strong>Boleto</strong><span>opcional</span></div>
+      </div>
+    </section>`;
+
+  const configContent = `
+    <section class="card" id="config">
+      <h3>Configurações</h3>
+      <div class="form-grid">
+        <div class="field"><label>Organizador</label><input class="input" value="${organizer?.company || 'ChipBelém'}" readonly></div>
+        <div class="field"><label>E-mail de contato</label><input class="input" value="${organizer?.email || 'contato@chipbelem.com.br'}" readonly></div>
+        <div class="field full"><label>Integração Mercado Pago</label><input class="input" value="Configure as chaves no cadastro do evento" readonly></div>
+      </div>
+    </section>`;
+
+  const contentByKey = {
+    dashboard: dashboardContent,
+    eventos: eventosContent,
+    inscritos: inscritosContent,
+    financeiro: financeiroContent,
+    config: configContent
+  };
 
   root.innerHTML = `
     <div class="container page">
-      <div class="section-head" style="margin-top:0;"><div><h2>Painel administrativo</h2><p>Dashboard para gerenciar eventos, inscritos e indicadores.</p></div><button class="btn btn-primary" type="button" id="newEventBtn">Novo evento</button></div>
+      <div class="section-head" style="margin-top:0;">
+        <div><h2>${adminPage.title}</h2><p>${adminPage.description}</p></div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <a class="btn btn-primary" href="organizador.html#criar-evento">Novo evento</a>
+          <button class="btn btn-outline" type="button" id="adminLogoutBtn">Sair</button>
+        </div>
+      </div>
       <div class="admin-layout">
         <aside class="admin-menu">
-          <a class="active" href="#dashboard">📊 Dashboard</a>
-          <a href="#eventos">🏁 Eventos</a>
-          <a href="#inscritos">👥 Inscritos</a>
-          <a href="#financeiro">💳 Financeiro</a>
-          <a href="#config">⚙️ Configurações</a>
+          <a class="${active === 'dashboard' ? 'active' : ''}" href="admin.html">📊 Dashboard</a>
+          <a class="${active === 'eventos' ? 'active' : ''}" href="admin-eventos.html">🏁 Eventos</a>
+          <a class="${active === 'inscritos' ? 'active' : ''}" href="admin-inscritos.html">👥 Inscritos</a>
+          <a class="${active === 'financeiro' ? 'active' : ''}" href="admin-financeiro.html">💳 Financeiro</a>
+          <a class="${active === 'config' ? 'active' : ''}" href="admin-configuracoes.html">⚙️ Configurações</a>
         </aside>
         <main class="admin-content">
-          <div class="admin-cards" id="dashboard">
-            <div class="kpi"><span>Eventos cadastrados</span><strong>${EVENTS.length}</strong></div>
-            <div class="kpi"><span>Inscrições</span><strong>${usedSlots}</strong></div>
-            <div class="kpi"><span>Receita simulada</span><strong>${money(142380 + revenue)}</strong></div>
-            <div class="kpi"><span>Vagas totais</span><strong>${totalSlots}</strong></div>
-          </div>
-
-          <section class="card" id="eventos">
-            <h3>Eventos</h3>
-            <div class="table-wrap">
-              <table class="data-table">
-                <thead><tr><th>Evento</th><th>Cidade</th><th>Data</th><th>Status</th><th>Ações</th></tr></thead>
-                <tbody>${EVENTS.map(event => `<tr><td><strong>${event.title}</strong><br><small>${event.category}</small></td><td>${event.city}/${event.state}</td><td>${dateBR(event.date)}</td><td><span class="badge ${statusClass(event.status)}">${event.badge}</span></td><td><a class="btn btn-outline btn-small" href="evento.html?evento=${event.slug}">Abrir</a></td></tr>`).join('')}</tbody>
-              </table>
-            </div>
-          </section>
-
-          <section class="card" id="inscritos">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;"><h3 style="margin:0;">Inscritos recentes</h3><button class="btn btn-outline btn-small" type="button" id="exportBtn">Exportar CSV</button></div>
-            <div class="table-wrap" style="margin-top:12px;">
-              <table class="data-table">
-                <thead><tr><th>Número</th><th>Atleta</th><th>Evento</th><th>Percurso</th><th>Valor</th><th>Status</th></tr></thead>
-                <tbody>${regs.map(reg => `<tr><td>${reg.id}</td><td><strong>${reg.name}</strong><br><small>${reg.email}</small></td><td>${reg.eventTitle}</td><td>${reg.distance}</td><td>${money(Number(reg.amount || 0))}</td><td><span class="badge warning">${reg.status}</span></td></tr>`).join('')}</tbody>
-              </table>
-            </div>
-          </section>
-
-          <section class="card" id="financeiro">
-            <h3>Resumo financeiro</h3>
-            <div class="stat-grid">
-              <div class="stat"><strong>${money(revenue)}</strong><span>valor em inscrições</span></div>
-              <div class="stat"><strong>${regs.length}</strong><span>pagamentos pendentes</span></div>
-              <div class="stat"><strong>${money(regs.length ? revenue / regs.length : 0)}</strong><span>ticket médio</span></div>
-            </div>
-          </section>
+          ${contentByKey[active]}
         </main>
       </div>
     </div>`;
 
-  document.querySelector('#newEventBtn')?.addEventListener('click', () => showToast('Tela de cadastro de evento prevista para a próxima versão.'));
   document.querySelector('#exportBtn')?.addEventListener('click', exportCSV);
+  document.querySelector('#adminLogoutBtn')?.addEventListener('click', () => {
+    localStorage.removeItem(ORGANIZER_AUTH_KEY);
+    showToast('Você saiu do painel administrativo.');
+    setTimeout(() => location.href = 'organizador.html', 450);
+  });
 }
 
 function exportCSV() {

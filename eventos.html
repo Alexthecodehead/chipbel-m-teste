@@ -4,44 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Eventos | ChipBelem</title>
-  <meta name="description" content="Lista de eventos de corrida disponíveis para inscrição.">
-  <link rel="icon" href="assets/favicon_chip.png?v=2" type="image/png">
-  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="/assets/favicon_chip.png?v=2" type="image/png">
 </head>
 <body>
-  <header id="site-header"></header>
-  <main class="container page">
-    <div class="section-head" style="margin-top:0;">
-      <div>
-        <span class="eyebrow">🏁 Eventos disponíveis</span>
-        <h2>Encontre sua próxima corrida</h2>
-        <p>Filtre por nome, cidade ou estado e abra a página completa do evento.</p>
-      </div>
-      <span id="eventsCount" class="badge info">0 eventos</span>
-    </div>
-
-    <div class="filters">
-      <div class="field">
-        <label>Buscar</label>
-        <input class="input" id="searchFilter" placeholder="Nome do evento, cidade ou modalidade">
-      </div>
-      <div class="field">
-        <label>Estado</label>
-        <select class="select" id="stateFilter"></select>
-      </div>
-      <div class="field">
-        <label>Cidade</label>
-        <select class="select" id="cityFilter"></select>
-      </div>
-      <div class="field" style="justify-content:end;">
-        <button class="btn btn-outline" id="clearFilters" type="button">Limpar</button>
-      </div>
-    </div>
-
-    <div class="event-grid" id="eventsList"></div>
-  </main>
-  <footer id="site-footer"></footer>
-  <script src="js/data.js"></script>
-  <script src="js/main.js"></script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
