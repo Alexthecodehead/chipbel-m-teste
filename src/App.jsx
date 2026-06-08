@@ -68,8 +68,7 @@ function Layout({ athlete, organizer, onAthleteLogout, children }) {
           <div className="container nav">
             <a className="logo" href="index.html" aria-label="ChipBelem"><img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" /></a>
             <nav className={`nav-links ${menuOpen ? 'open' : ''}`} id="navLinks">
-              <a href="index.html" className={page === 'index.html' ? 'active' : ''}>Início</a>
-              <a href="eventos.html" className={page === 'eventos.html' || page === 'evento.html' ? 'active' : ''}>Eventos</a>
+              <a href="eventos.html" className={page === 'index.html' || page === 'eventos.html' || page === 'evento.html' ? 'active' : ''}>Eventos</a>
               <a href="minhas-inscricoes.html" className={page === 'minhas-inscricoes.html' ? 'active' : ''}>Área do atleta</a>
             </nav>
             <div className="nav-actions">
@@ -688,7 +687,7 @@ function AdminPage({ organizer, setOrganizer, registrations, organizerRequests, 
           <p>O painel administrativo e liberado apenas para a conta base ou para organizadores aprovados.</p>
           <div className="hero-actions" style={{ justifyContent: 'center' }}>
             <a className="btn btn-primary" href="organizador.html#organizerAccess">Entrar como organizador</a>
-            <a className="btn btn-outline" href="index.html">Voltar ao inicio</a>
+            <a className="btn btn-outline" href="index.html">Voltar aos eventos</a>
           </div>
         </section>
       </main>
@@ -796,7 +795,7 @@ export default function App() {
     setTimeout(() => { window.location.href = 'index.html'; }, 450);
   };
   const pageContent = useMemo(() => {
-    if (page === 'eventos.html') return <EventsPage />;
+    if (page === 'index.html' || page === 'eventos.html') return <EventsPage />;
     if (page === 'evento.html') return <EventDetailPage />;
     if (page === 'inscricao.html') return <CheckoutPage athlete={athlete} setAthlete={setAthlete} registrations={registrations} setRegistrations={setRegistrations} toast={toast} />;
     if (page === 'login.html') return <AuthPage type="login" athlete={athlete} setAthlete={setAthlete} toast={toast} />;
@@ -804,7 +803,7 @@ export default function App() {
     if (page === 'minhas-inscricoes.html') return <AthleteArea athlete={athlete} registrations={registrations} setAthlete={setAthlete} toast={toast} />;
     if (page === 'organizador.html') return <OrganizerPage organizer={organizer} setOrganizer={setOrganizer} organizerEvents={organizerEvents} setOrganizerEvents={setOrganizerEvents} organizerRequests={organizerRequests} setOrganizerRequests={setOrganizerRequests} approvedOrganizers={approvedOrganizers} toast={toast} />;
     if (page.startsWith('admin')) return <AdminPage organizer={organizer} setOrganizer={setOrganizer} registrations={registrations} organizerRequests={organizerRequests} setOrganizerRequests={setOrganizerRequests} approvedOrganizers={approvedOrganizers} setApprovedOrganizers={setApprovedOrganizers} toast={toast} />;
-    return <HomePage />;
+    return <EventsPage />;
   }, [page, athlete, organizer, registrations, organizerEvents, organizerRequests, approvedOrganizers]);
 
   return (
