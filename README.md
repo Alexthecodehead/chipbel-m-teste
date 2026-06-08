@@ -62,8 +62,9 @@ Este projeto usa Vite e precisa publicar a pasta `dist`, nao a raiz do repositor
 
 1. Envie os arquivos para o GitHub.
 2. No repositorio, abra `Settings > Pages`.
-3. Em `Build and deployment`, selecione `GitHub Actions`.
-4. Faca um novo push ou rode manualmente o workflow `Deploy GitHub Pages`.
+3. Em `Build and deployment > Source`, selecione `GitHub Actions`.
+4. Nao use `Deploy from a branch` com `main / root`, porque isso publica o JSX original e deixa a pagina branca.
+5. Faca um novo push ou rode manualmente o workflow `Deploy GitHub Pages`.
 
 O `vite.config.js` esta configurado para o caminho publico `/chipbel-m-teste/`.
 
