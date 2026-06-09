@@ -206,12 +206,14 @@ function EventsPage() {
   const [query, setQuery] = useState('');
   const [state, setState] = useState('');
   const [city, setCity] = useState('');
+  const [openOnly, setOpenOnly] = useState(false);
   const states = [...new Set(EVENTS.map(event => event.state))];
   const cities = [...new Set(EVENTS.map(event => event.city))];
   const filtered = EVENTS.filter(event => (
     (!query || `${event.title} ${event.city} ${event.category}`.toLowerCase().includes(query.toLowerCase())) &&
     (!state || event.state === state) &&
-    (!city || event.city === city)
+    (!city || event.city === city) &&
+    (!openOnly || event.status === 'open')
   ));
   return (
     <main className="container page">
@@ -227,7 +229,12 @@ function EventsPage() {
         <div className="field"><label>Buscar</label><input className="input" value={query} onChange={e => setQuery(e.target.value)} placeholder="Nome do evento, cidade ou modalidade" /></div>
         <div className="field"><label>Estado</label><select className="select" value={state} onChange={e => setState(e.target.value)}><option value="">Todos os estados</option>{states.map(item => <option key={item}>{item}</option>)}</select></div>
         <div className="field"><label>Cidade</label><select className="select" value={city} onChange={e => setCity(e.target.value)}><option value="">Todas as cidades</option>{cities.map(item => <option key={item}>{item}</option>)}</select></div>
-        <div className="field" style={{ justifyContent: 'end' }}><button className="btn btn-outline" type="button" onClick={() => { setQuery(''); setState(''); setCity(''); }}>Limpar</button></div>
+        <label className="filter-switch">
+          <input type="checkbox" checked={openOnly} onChange={e => setOpenOnly(e.target.checked)} />
+          <span className="filter-switch-track"><span /></span>
+          <strong>Inscrições Abertas</strong>
+        </label>
+        <div className="field" style={{ justifyContent: 'end' }}><button className="btn btn-outline" type="button" onClick={() => { setQuery(''); setState(''); setCity(''); setOpenOnly(false); }}>Limpar</button></div>
       </div>
       <div className="event-grid">{filtered.length ? filtered.map(event => <EventCard event={event} key={event.id} />) : <div className="empty">Nenhum evento encontrado com esses filtros.</div>}</div>
     </main>
