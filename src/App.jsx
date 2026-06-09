@@ -451,7 +451,7 @@ function AuthPage({ type, athlete, setAthlete, toast }) {
       toast('E-mail de confirmacao enviado.');
       e.currentTarget.reset();
     } catch (error) {
-      setConfirmationNotice('Nao foi possivel enviar o e-mail automaticamente nesta execucao. Use o link abaixo para testar a ativacao.');
+      setConfirmationNotice(`Nao foi possivel enviar o e-mail automaticamente: ${error.message}. Use o link abaixo para testar a ativacao.`);
       setConfirmationLink(confirmationUrl);
       toast('Cadastro pendente. Configure o envio de e-mail na Vercel.');
     } finally {
