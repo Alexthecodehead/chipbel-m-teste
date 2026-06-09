@@ -90,6 +90,19 @@ Passos:
 
 No Vercel, o site usa caminho raiz `/`. No GitHub Pages, o workflow usa `GITHUB_PAGES=true` para manter `/chipbel-m-teste/`.
 
+## Envio de e-mail de confirmacao
+
+O cadastro de atleta chama a funcao serverless `api/send-confirmation.js`.
+
+Para enviar e-mails reais na Vercel, crie estas variaveis em `Project > Settings > Environment Variables`:
+
+- `RESEND_API_KEY`: chave da sua conta Resend.
+- `MAIL_FROM`: remetente verificado, por exemplo `ChipBelem <contato@seudominio.com>`.
+
+Sem essas variaveis, o cadastro ainda cria a conta pendente e mostra um link de demonstracao para testar a ativacao.
+
+Veja o passo a passo completo em `docs/email-confirmation-resend-vercel.md`.
+
 ## Proximos passos para virar sistema real
 
 - Criar uma API para conectar o frontend ao PostgreSQL

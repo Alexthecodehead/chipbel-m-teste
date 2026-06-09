@@ -484,6 +484,17 @@ button { cursor: pointer; }
   letter-spacing:-.03em;
 }
 .auth-card p { color:var(--muted); margin:0; }
+.auth-alert {
+  margin-bottom:18px;
+  padding:14px;
+  border:1px solid #bbf7d0;
+  border-radius:16px;
+  background:#f0fdf4;
+  color:#14532d;
+}
+.auth-alert strong, .auth-alert a { display:block; }
+.auth-alert p { color:#166534; margin:4px 0 0; }
+.auth-alert a { margin-top:8px; color:#15803d; font-weight:800; word-break:break-all; }
 .auth-help-row {
   display:flex;
   justify-content:space-between;
@@ -795,6 +806,10 @@ button { cursor: pointer; }
 .athlete-event-grid .event-title { min-height: auto; }
 .empty-state-card { max-width: 720px; margin: 0 auto; text-align:center; }
 .empty-state-card p { color:var(--muted); margin: 0 auto; max-width: 560px; }
+.confirm-card { max-width:720px; margin:0 auto; text-align:center; }
+.confirm-card p { color:var(--muted); margin:0 auto 18px; max-width:560px; }
+.confirm-card.success { border-color:#bbf7d0; }
+.confirm-card.error { border-color:#fecaca; }
 
 .admin-layout { display:grid; grid-template-columns: 260px 1fr; gap:22px; align-items:start; }
 .admin-menu { background:#0f172a; color:#fff; border-radius:26px; padding:16px; position:sticky; top:98px; }

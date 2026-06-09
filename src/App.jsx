@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DEMO_USER, EVENTS, SHIRT_SIZES } from './data.js';
 
 const AUTH_KEY = 'chipbelem_athlete';
+const ATHLETE_ACCOUNTS_KEY = 'chipbelem_athlete_accounts';
+const ATHLETE_PENDING_KEY = 'chipbelem_pending_athletes';
 const REGISTRATION_KEY = 'correja_registrations';
 const ORGANIZER_EVENTS_KEY = 'chipbelem_organizer_events';
 const ORGANIZER_AUTH_KEY = 'chipbelem_organizer';
@@ -32,6 +34,26 @@ const assetUrl = (path = '') => {
   const value = String(path);
   if (/^(https?:|data:|blob:)/.test(value)) return value;
   return `${import.meta.env.BASE_URL}${value.replace(/^\/+/, '')}`;
+};
+const createToken = () => (
+  globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `token-${Date.now()}-${Math.random().toString(36).slice(2)}`
+);
+const athleteSession = (account) => ({
+  name: account.name,
+  email: account.email,
+  phone: account.phone,
+  city: account.city,
+  verifiedAt: account.verifiedAt
+});
+const sendConfirmationEmail = async ({ name, email, confirmationUrl }) => {
+  const response = await fetch('/api/send-confirmation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, confirmationUrl })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Falha ao enviar e-mail.');
+  return data;
 };
 const normalizeEmail = (value = '') => String(value).trim().toLowerCase();
 const formatDateTime = (value) => value ? new Date(value).toLocaleString('pt-BR') : '-';
@@ -366,16 +388,75 @@ function CheckoutPage({ athlete, setAthlete, registrations, setRegistrations, to
 
 function AuthPage({ type, athlete, setAthlete, toast }) {
   const isLogin = type === 'login';
-  const submit = (e) => {
+  const [sending, setSending] = useState(false);
+  const [confirmationNotice, setConfirmationNotice] = useState('');
+  const [confirmationLink, setConfirmationLink] = useState('');
+  const submit = async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    const nextAthlete = isLogin ? { ...(athlete || DEMO_USER), email: form.get('email') } : {
-      name: form.get('name'), email: form.get('email'), phone: form.get('phone'), city: form.get('city')
+    const email = String(form.get('email') || '').trim();
+    const password = String(form.get('password') || '');
+    if (isLogin) {
+      const accounts = getJSON(ATHLETE_ACCOUNTS_KEY, []);
+      const pending = getJSON(ATHLETE_PENDING_KEY, []).find(item => normalizeEmail(item.email) === normalizeEmail(email));
+      const account = accounts.find(item => normalizeEmail(item.email) === normalizeEmail(email));
+      if (!account) return toast(pending ? 'Confirme seu e-mail antes de entrar.' : 'Conta nao encontrada. Crie seu cadastro primeiro.');
+      if (String(account.password || '') !== password) return toast('Senha invalida.');
+      const nextAthlete = athleteSession(account);
+      setAthlete(nextAthlete);
+      setJSON(AUTH_KEY, nextAthlete);
+      toast('Login realizado.');
+      setTimeout(() => { window.location.href = 'minhas-inscricoes.html'; }, 500);
+      return;
+    }
+    const nextAthlete = {
+      name: String(form.get('name') || '').trim(),
+      email,
+      phone: String(form.get('phone') || '').trim(),
+      city: String(form.get('city') || '').trim()
     };
-    setAthlete(nextAthlete);
-    setJSON(AUTH_KEY, nextAthlete);
-    toast(isLogin ? 'Login realizado.' : 'Cadastro de atleta salvo.');
-    setTimeout(() => { window.location.href = 'minhas-inscricoes.html'; }, 500);
+    if (athlete) {
+      const updatedAthlete = { ...nextAthlete, verifiedAt: athlete.verifiedAt || new Date().toISOString() };
+      const accounts = getJSON(ATHLETE_ACCOUNTS_KEY, []);
+      const nextAccounts = accounts.map(account => normalizeEmail(account.email) === normalizeEmail(athlete.email) ? { ...account, ...nextAthlete, password, verifiedAt: account.verifiedAt || updatedAthlete.verifiedAt } : account);
+      setJSON(ATHLETE_ACCOUNTS_KEY, nextAccounts);
+      setAthlete(updatedAthlete);
+      setJSON(AUTH_KEY, updatedAthlete);
+      toast('Perfil atualizado.');
+      setTimeout(() => { window.location.href = 'minhas-inscricoes.html'; }, 500);
+      return;
+    }
+    const accounts = getJSON(ATHLETE_ACCOUNTS_KEY, []);
+    if (accounts.some(account => normalizeEmail(account.email) === normalizeEmail(email))) {
+      toast('Este e-mail ja possui uma conta ativa.');
+      return;
+    }
+    const token = createToken();
+    const confirmationUrl = new URL(`confirmar-email.html?token=${encodeURIComponent(token)}`, window.location.href).href;
+    const pendingAthlete = {
+      ...nextAthlete,
+      password,
+      token,
+      confirmationUrl,
+      createdAt: new Date().toISOString()
+    };
+    const pendingAccounts = getJSON(ATHLETE_PENDING_KEY, []).filter(item => normalizeEmail(item.email) !== normalizeEmail(email));
+    setJSON(ATHLETE_PENDING_KEY, [pendingAthlete, ...pendingAccounts]);
+    setSending(true);
+    setConfirmationLink('');
+    setConfirmationNotice('');
+    try {
+      await sendConfirmationEmail(pendingAthlete);
+      setConfirmationNotice('Enviamos um link de confirmacao para o seu e-mail. Abra a mensagem para ativar a conta.');
+      toast('E-mail de confirmacao enviado.');
+      e.currentTarget.reset();
+    } catch (error) {
+      setConfirmationNotice('Nao foi possivel enviar o e-mail automaticamente nesta execucao. Use o link abaixo para testar a ativacao.');
+      setConfirmationLink(confirmationUrl);
+      toast('Cadastro pendente. Configure o envio de e-mail na Vercel.');
+    } finally {
+      setSending(false);
+    }
   };
   return (
     <main className={`auth-page ${isLogin ? 'auth-page-login' : 'auth-page-signup'}`}>
@@ -395,6 +476,7 @@ function AuthPage({ type, athlete, setAthlete, toast }) {
       <section className="auth-panel">
         <form className="auth-card" onSubmit={submit}>
           <div className="auth-card-head"><span>{isLogin ? 'Login' : 'Cadastro'}</span><h2>{isLogin ? 'Bem-vindo de volta' : 'Dados do atleta'}</h2><p>{isLogin ? 'Use seu e-mail e senha para entrar na área do atleta.' : 'Preencha seus dados para participar dos eventos.'}</p></div>
+          {confirmationNotice && <div className="auth-alert"><strong>Confirmação de e-mail</strong><p>{confirmationNotice}</p>{confirmationLink && <a href={confirmationLink}>{confirmationLink}</a>}</div>}
           <div className="form-grid">
             {!isLogin && <div className="field full"><label>Nome completo</label><input className="input" name="name" required placeholder="Seu nome" defaultValue={athlete?.name || ''} /></div>}
             <div className="field full"><label>E-mail</label><input className="input" name="email" required type="email" placeholder="voce@email.com" defaultValue={athlete?.email || ''} /></div>
@@ -402,11 +484,60 @@ function AuthPage({ type, athlete, setAthlete, toast }) {
             <div className="field full"><label>Senha</label><input className="input" name="password" required type="password" placeholder="••••••••" /></div>
           </div>
           {isLogin && <div className="auth-help-row"><label><input type="checkbox" defaultChecked /> Lembrar acesso</label><a href="#">Esqueci minha senha</a></div>}
-          <button className="btn btn-primary btn-block auth-submit" type="submit">{isLogin ? 'Entrar' : athlete ? 'Salvar perfil' : 'Cadastrar atleta'}</button>
+          <button className="btn btn-primary btn-block auth-submit" type="submit" disabled={sending}>{sending ? 'Enviando...' : isLogin ? 'Entrar' : athlete ? 'Salvar perfil' : 'Cadastrar atleta'}</button>
           <div className="auth-divider"><span>ou</span></div>
           <div className="auth-links">{isLogin ? <><span>Ainda não tem cadastro?</span><a href="cadastro.html">Criar conta</a></> : <><span>Já possui cadastro?</span><a href="login.html">Entrar agora</a></>}</div>
           <a className="auth-back-link" href="eventos.html">Ver eventos disponíveis</a>
         </form>
+      </section>
+    </main>
+  );
+}
+
+function ConfirmEmailPage({ setAthlete }) {
+  const [status, setStatus] = useState({
+    type: 'loading',
+    title: 'Confirmando e-mail',
+    message: 'Estamos validando o link de confirmação.'
+  });
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (!token) {
+      setStatus({ type: 'error', title: 'Link inválido', message: 'O link de confirmação não possui token.' });
+      return;
+    }
+    const pendingAccounts = getJSON(ATHLETE_PENDING_KEY, []);
+    const pending = pendingAccounts.find(account => account.token === token);
+    if (!pending) {
+      setStatus({ type: 'error', title: 'Link expirado ou já utilizado', message: 'Solicite um novo cadastro ou tente entrar com a conta já confirmada.' });
+      return;
+    }
+    const verifiedAt = new Date().toISOString();
+    const account = {
+      name: pending.name,
+      email: pending.email,
+      phone: pending.phone,
+      city: pending.city,
+      password: pending.password,
+      verifiedAt
+    };
+    const accounts = getJSON(ATHLETE_ACCOUNTS_KEY, []).filter(item => normalizeEmail(item.email) !== normalizeEmail(account.email));
+    setJSON(ATHLETE_ACCOUNTS_KEY, [account, ...accounts]);
+    setJSON(ATHLETE_PENDING_KEY, pendingAccounts.filter(item => item.token !== token));
+    const nextAthlete = athleteSession(account);
+    setAthlete(nextAthlete);
+    setJSON(AUTH_KEY, nextAthlete);
+    setStatus({ type: 'success', title: 'Conta ativada', message: 'Seu e-mail foi confirmado e sua conta já está ativa.' });
+  }, [setAthlete]);
+  return (
+    <main className="container page">
+      <section className={`card confirm-card ${status.type}`}>
+        <h2>{status.title}</h2>
+        <p>{status.message}</p>
+        <div className="hero-actions" style={{ justifyContent: 'center' }}>
+          <a className="btn btn-primary" href="minhas-inscricoes.html">Ir para área do atleta</a>
+          <a className="btn btn-outline" href="eventos.html">Ver eventos</a>
+        </div>
       </section>
     </main>
   );
@@ -807,6 +938,7 @@ export default function App() {
     if (page === 'inscricao.html') return <CheckoutPage athlete={athlete} setAthlete={setAthlete} registrations={registrations} setRegistrations={setRegistrations} toast={toast} />;
     if (page === 'login.html') return <AuthPage type="login" athlete={athlete} setAthlete={setAthlete} toast={toast} />;
     if (page === 'cadastro.html') return <AuthPage type="cadastro" athlete={athlete} setAthlete={setAthlete} toast={toast} />;
+    if (page === 'confirmar-email.html') return <ConfirmEmailPage setAthlete={setAthlete} />;
     if (page === 'minhas-inscricoes.html') return <AthleteArea athlete={athlete} registrations={registrations} setAthlete={setAthlete} toast={toast} />;
     if (page === 'organizador.html') return <OrganizerPage organizer={organizer} setOrganizer={setOrganizer} organizerEvents={organizerEvents} setOrganizerEvents={setOrganizerEvents} organizerRequests={organizerRequests} setOrganizerRequests={setOrganizerRequests} approvedOrganizers={approvedOrganizers} toast={toast} />;
     if (page.startsWith('admin')) return <AdminPage organizer={organizer} setOrganizer={setOrganizer} registrations={registrations} organizerRequests={organizerRequests} setOrganizerRequests={setOrganizerRequests} approvedOrganizers={approvedOrganizers} setApprovedOrganizers={setApprovedOrganizers} toast={toast} />;
