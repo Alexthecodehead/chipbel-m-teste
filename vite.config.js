@@ -10,6 +10,7 @@ const pages = [
   'login',
   'cadastro',
   'confirmar-email',
+  'contato',
   'minhas-inscricoes',
   'organizador',
   'admin',

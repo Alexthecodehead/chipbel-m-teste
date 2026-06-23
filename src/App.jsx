@@ -113,9 +113,47 @@ function Layout({ athlete, organizer, onAthleteLogout, children }) {
       {children}
       <footer className="footer">
         <div className="container footer-grid">
-          <div>
-            <img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" />
-            <p>Feito por Alexandre Durães.</p>
+          <div className="footer-top">
+            <div className="footer-brand">
+              <img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" />
+            </div>
+            <div className="footer-social" aria-label="Redes sociais">
+              <a href="https://www.facebook.com/chipbelemcrono" target="_blank" rel="noreferrer" aria-label="Facebook ChipBelem">
+                <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M19.1 29V17.8h3.8l.6-4.4h-4.4v-2.8c0-1.3.4-2.1 2.2-2.1h2.3V4.6c-.4-.1-1.8-.2-3.4-.2-3.4 0-5.7 2.1-5.7 5.8v3.2h-3.8v4.4h3.8V29h4.6z" /></svg>
+              </a>
+              <a href="https://www.instagram.com/chipbelemcrono/" target="_blank" rel="noreferrer" aria-label="Instagram ChipBelem">
+                <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="5" width="22" height="22" rx="6" /><circle cx="16" cy="16" r="5" /><circle className="footer-icon-dot" cx="22.3" cy="9.7" r="1.3" /></svg>
+              </a>
+              <a href="contato.html" aria-label="Falar com a equipe ChipBelem">
+                <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 4.5c6.2 0 11.2 4.5 11.2 10.1 0 5.1-4.1 9.3-9.6 10l-5.5 3.2.7-3.9C8.1 22.4 4.8 18.8 4.8 14.6 4.8 9 9.8 4.5 16 4.5z" /><path d="M13.3 12.5c.2-2.2 1.8-3.6 4-3.6 2.5 0 4.1 1.5 4.1 3.6 0 1.5-.7 2.5-2.2 3.5-1.2.8-1.6 1.4-1.6 2.7v.5h-3v-.7c0-1.8.7-3 2.1-4 1.1-.8 1.5-1.2 1.5-1.9 0-.8-.6-1.3-1.5-1.3s-1.5.5-1.7 1.5l-1.7-.3z" /><circle className="footer-icon-dot" cx="16.1" cy="22.5" r="1.5" /></svg>
+              </a>
+            </div>
+          </div>
+          <p className="footer-description">
+            A ChipBelém conecta atletas, organizadores e eventos esportivos com inscrições, cronometragem e gestão de corridas de forma prática e segura.
+          </p>
+          <nav className="footer-links" aria-label="Links do rodapé">
+            <div className="footer-link-group">
+              <h2>Atletas</h2>
+              <a href="eventos.html">Acessar eventos</a>
+              <a href="cadastro.html">Crie sua conta</a>
+              <a href="minhas-inscricoes.html">Área do atleta</a>
+            </div>
+            <div className="footer-link-group">
+              <h2>Organizadores</h2>
+              <a href="organizador.html">Serviços oferecidos</a>
+              <a href="organizador.html">Crie sua conta</a>
+              <a href="admin.html">Painel admin</a>
+            </div>
+            <div className="footer-link-group">
+              <h2>Institucional</h2>
+              <a href="contato.html">Fale conosco</a>
+              <a href="https://www.instagram.com/chipbelemcrono/" target="_blank" rel="noreferrer">Instagram</a>
+              <a href="https://www.facebook.com/chipbelemcrono" target="_blank" rel="noreferrer">Facebook</a>
+            </div>
+          </nav>
+          <div className="footer-bottom">
+            <span>© 2026 - ChipBelém - Todos os direitos reservados.</span>
           </div>
         </div>
       </footer>
@@ -543,6 +581,55 @@ function ConfirmEmailPage({ setAthlete }) {
   );
 }
 
+function ContactPage() {
+  const [sent, setSent] = useState(false);
+  const submitContact = (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const subject = encodeURIComponent('Contato pelo site ChipBelem');
+    const body = encodeURIComponent([
+      `Nome: ${form.get('name') || ''}`,
+      `E-mail: ${form.get('email') || ''}`,
+      '',
+      form.get('message') || ''
+    ].join('\n'));
+    window.location.href = `mailto:${BASE_ADMIN.email}?subject=${subject}&body=${body}`;
+    setSent(true);
+    event.currentTarget.reset();
+  };
+  return (
+    <main className="container page contact-page">
+      <div className="section-head" style={{ marginTop: 0 }}>
+        <div>
+          <span className="eyebrow">Contato</span>
+          <h2>Fale com a nossa equipe</h2>
+          <p>Envie sua dúvida sobre inscrições, eventos, cronometragem ou suporte para organizadores.</p>
+        </div>
+      </div>
+      <div className="contact-layout">
+        <form className="card contact-form" onSubmit={submitContact}>
+          <div className="form-grid">
+            <div className="field"><label>Nome</label><input className="input" name="name" required placeholder="Seu nome" /></div>
+            <div className="field"><label>E-mail</label><input className="input" name="email" required type="email" placeholder="Seu e-mail" /></div>
+            <div className="field full"><label>Mensagem</label><textarea className="textarea" name="message" required placeholder="Como podemos ajudar?" /></div>
+          </div>
+          <button className="btn btn-primary" type="submit">Enviar contato</button>
+          {sent && <div className="success-box show">Seu aplicativo de e-mail foi aberto para concluir o envio.</div>}
+        </form>
+        <aside className="card contact-aside">
+          <img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" />
+          <h3>ChipBelem</h3>
+          <p>Cronometragem, inscrições e gestão de eventos esportivos.</p>
+          <div className="contact-social">
+            <a href="https://www.instagram.com/chipbelemcrono/" target="_blank" rel="noreferrer">Instagram</a>
+            <a href="https://www.facebook.com/chipbelemcrono" target="_blank" rel="noreferrer">Facebook</a>
+          </div>
+        </aside>
+      </div>
+    </main>
+  );
+}
+
 function AthleteArea({ athlete, registrations, setAthlete, toast }) {
   if (!athlete) {
     return (
@@ -939,6 +1026,7 @@ export default function App() {
     if (page === 'login.html') return <AuthPage type="login" athlete={athlete} setAthlete={setAthlete} toast={toast} />;
     if (page === 'cadastro.html') return <AuthPage type="cadastro" athlete={athlete} setAthlete={setAthlete} toast={toast} />;
     if (page === 'confirmar-email.html') return <ConfirmEmailPage setAthlete={setAthlete} />;
+    if (page === 'contato.html') return <ContactPage />;
     if (page === 'minhas-inscricoes.html') return <AthleteArea athlete={athlete} registrations={registrations} setAthlete={setAthlete} toast={toast} />;
     if (page === 'organizador.html') return <OrganizerPage organizer={organizer} setOrganizer={setOrganizer} organizerEvents={organizerEvents} setOrganizerEvents={setOrganizerEvents} organizerRequests={organizerRequests} setOrganizerRequests={setOrganizerRequests} approvedOrganizers={approvedOrganizers} toast={toast} />;
     if (page.startsWith('admin')) return <AdminPage organizer={organizer} setOrganizer={setOrganizer} registrations={registrations} organizerRequests={organizerRequests} setOrganizerRequests={setOrganizerRequests} approvedOrganizers={approvedOrganizers} setApprovedOrganizers={setApprovedOrganizers} toast={toast} />;
