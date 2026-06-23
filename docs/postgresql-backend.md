@@ -1,12 +1,14 @@
 # Backend PostgreSQL do ChipBelem
 
-Este é o primeiro desenho de banco para substituir o `localStorage` atual por uma base PostgreSQL.
+O PostgreSQL e a fonte confiavel para usuarios, autenticacao, confirmacao de e-mail e aprovacao de organizadores. O frontend nao deve autorizar perfis a partir do `localStorage`.
 
 ## Entidades principais
 
 - `users`: atletas, organizadores e administradores.
 - `organizer_profiles`: dados comerciais do organizador.
 - `organizer_requests`: pedidos de novos organizadores aguardando aprovacao.
+- `email_verification_tokens`: hashes de tokens com expiracao.
+- `security_rate_limits`: bloqueio persistente de tentativas abusivas.
 - `events`: dados públicos do evento.
 - `event_routes`: percursos, largada, chegada e distância.
 - `event_lots`: lotes/preços de inscrição.
@@ -29,6 +31,12 @@ psql -U postgres -d chipbelem -f database/schema.sql
 psql -U postgres -d chipbelem -f database/seed.sql
 ```
 
+Se o banco ja existia antes da revisao de seguranca, aplique:
+
+```bash
+psql -U postgres -d chipbelem -f database/migrations/001_security_hardening.sql
+```
+
 ## Comandos úteis
 
 ```bash
@@ -44,17 +52,22 @@ SELECT * FROM users;
 SELECT * FROM events;
 ```
 
-## Próximo passo recomendado
+## APIs implementadas
 
-Criar uma API para o frontend consumir:
+- `POST /api/auth/login`
+- `POST /api/auth/register`
+- `POST /api/auth/confirm`
+- `GET /api/auth/session`
+- `POST /api/auth/logout`
+- `POST /api/auth/profile`
+- `GET|POST /api/organizer-requests`
+- `POST /api/organizer-requests/approve`
 
-- `POST /auth/login`
-- `POST /auth/register`
+## Proximas APIs
+
 - `GET /events`
 - `GET /events/:slug`
 - `POST /organizer/events`
-- `POST /organizer/requests`
-- `PATCH /admin/organizer-requests/:id/approve`
 - `GET /admin/dashboard`
 - `GET /admin/events`
 - `GET /admin/registrations`
@@ -64,7 +77,7 @@ Criar uma API para o frontend consumir:
 
 ## Observações de segurança
 
-- Nunca salve senha em texto puro. Use `bcrypt` para gerar `password_hash`.
+- Nunca salve senha em texto puro. Use a funcao scrypt de `server/auth.js` para gerar `password_hash`.
 - A conta base deve ter `role = 'admin'`; novos organizadores devem entrar como pedido pendente e so virar `role = 'organizer'` apos aprovacao.
 - O `access_token` do Mercado Pago deve ser criptografado antes de gravar em `event_payment_settings.access_token_encrypted`.
 - O painel administrativo deve validar `role = 'organizer'` ou `role = 'admin'`.

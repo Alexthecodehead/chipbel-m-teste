@@ -1,22 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DEMO_USER, EVENTS, SHIRT_SIZES } from './data.js';
 
-const AUTH_KEY = 'chipbelem_athlete';
-const ATHLETE_ACCOUNTS_KEY = 'chipbelem_athlete_accounts';
-const ATHLETE_PENDING_KEY = 'chipbelem_pending_athletes';
-const REGISTRATION_KEY = 'correja_registrations';
 const ORGANIZER_EVENTS_KEY = 'chipbelem_organizer_events';
-const ORGANIZER_AUTH_KEY = 'chipbelem_organizer';
-const ORGANIZER_REQUESTS_KEY = 'chipbelem_organizer_requests';
-const APPROVED_ORGANIZERS_KEY = 'chipbelem_approved_organizers';
-const BASE_ADMIN = {
-  login: 'Admin',
-  email: 'Alexandre.duraes.soares@gmail.com',
-  password: 'Tecprime@123',
-  name: 'Admin',
-  company: 'Tecprime',
-  role: 'admin'
-};
+const CONTACT_EMAIL = 'Alexandre.duraes.soares@gmail.com';
 
 const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const dateBR = (date) => new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -35,35 +21,30 @@ const assetUrl = (path = '') => {
   if (/^(https?:|data:|blob:)/.test(value)) return value;
   return `${import.meta.env.BASE_URL}${value.replace(/^\/+/, '')}`;
 };
-const createToken = () => (
-  globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `token-${Date.now()}-${Math.random().toString(36).slice(2)}`
-);
-const athleteSession = (account) => ({
-  name: account.name,
-  email: account.email,
-  phone: account.phone,
-  city: account.city,
-  verifiedAt: account.verifiedAt
-});
-const sendConfirmationEmail = async ({ name, email, confirmationUrl }) => {
-  const response = await fetch('/api/send-confirmation', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email, confirmationUrl })
+const apiRequest = async (path, options = {}) => {
+  const response = await fetch(path, {
+    credentials: 'include',
+    ...options,
+    headers: options.body ? { 'Content-Type': 'application/json', ...(options.headers || {}) } : options.headers
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || 'Falha ao enviar e-mail.');
+  if (!response.ok) {
+    const error = new Error(data.error || 'Nao foi possivel concluir a operacao.');
+    error.code = data.code;
+    error.status = response.status;
+    throw error;
+  }
   return data;
 };
-const normalizeEmail = (value = '') => String(value).trim().toLowerCase();
 const formatDateTime = (value) => value ? new Date(value).toLocaleString('pt-BR') : '-';
-const getStoredOrganizer = () => {
-  const saved = getJSON(ORGANIZER_AUTH_KEY, null);
-  if (!saved || !['admin', 'organizer'].includes(saved.role)) {
-    localStorage.removeItem(ORGANIZER_AUTH_KEY);
-    return null;
-  }
-  return saved;
+const csvCell = (value) => {
+  const text = String(value ?? '').replaceAll('"', '""');
+  return `"${/^[=+\-@]/.test(text) ? `'${text}` : text}"`;
+};
+const isSafeHttpUrl = (value) => {
+  if (!value) return true;
+  try { return ['http:', 'https:'].includes(new URL(value).protocol); }
+  catch { return false; }
 };
 const statusClass = (status) => ['open', 'warning', 'info'].includes(status) ? status : 'closed';
 const getEventBySlug = (slug) => EVENTS.find(event => event.slug === slug) || EVENTS[0];
@@ -347,13 +328,18 @@ function EventDetailPage() {
   );
 }
 
-function CheckoutPage({ athlete, setAthlete, registrations, setRegistrations, toast }) {
+function CheckoutPage({ athlete, registrations, setRegistrations, toast }) {
   const params = new URLSearchParams(window.location.search);
   const event = getEventBySlug(params.get('evento'));
   const basePrice = event.prices[0].price;
   const [success, setSuccess] = useState(false);
   const submit = (e) => {
     e.preventDefault();
+    if (!athlete) {
+      toast('Entre na sua conta antes de concluir a inscricao.');
+      setTimeout(() => { window.location.href = 'login.html'; }, 500);
+      return;
+    }
     const form = new FormData(e.currentTarget);
     const registration = {
       id: 'CJ' + Math.floor(100000 + Math.random() * 900000),
@@ -362,11 +348,7 @@ function CheckoutPage({ athlete, setAthlete, registrations, setRegistrations, to
       eventTitle: event.title,
       eventDate: event.date,
       name: form.get('name'),
-      cpf: form.get('cpf'),
       email: form.get('email'),
-      phone: form.get('phone'),
-      gender: form.get('gender'),
-      team: form.get('team'),
       distance: form.get('distance'),
       shirt: form.get('shirt'),
       amount: basePrice,
@@ -375,12 +357,6 @@ function CheckoutPage({ athlete, setAthlete, registrations, setRegistrations, to
     };
     const next = [registration, ...registrations];
     setRegistrations(next);
-    setJSON(REGISTRATION_KEY, next);
-    if (!athlete) {
-      const nextAthlete = { name: form.get('name'), email: form.get('email'), phone: form.get('phone'), city: DEMO_USER.city };
-      setAthlete(nextAthlete);
-      setJSON(AUTH_KEY, nextAthlete);
-    }
     setSuccess(true);
     toast('Inscrição criada. Redirecionando para o Mercado Pago...');
     e.currentTarget.reset();
@@ -428,70 +404,52 @@ function AuthPage({ type, athlete, setAthlete, toast }) {
   const isLogin = type === 'login';
   const [sending, setSending] = useState(false);
   const [confirmationNotice, setConfirmationNotice] = useState('');
-  const [confirmationLink, setConfirmationLink] = useState('');
   const submit = async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const email = String(form.get('email') || '').trim();
     const password = String(form.get('password') || '');
-    if (isLogin) {
-      const accounts = getJSON(ATHLETE_ACCOUNTS_KEY, []);
-      const pending = getJSON(ATHLETE_PENDING_KEY, []).find(item => normalizeEmail(item.email) === normalizeEmail(email));
-      const account = accounts.find(item => normalizeEmail(item.email) === normalizeEmail(email));
-      if (!account) return toast(pending ? 'Confirme seu e-mail antes de entrar.' : 'Conta nao encontrada. Crie seu cadastro primeiro.');
-      if (String(account.password || '') !== password) return toast('Senha invalida.');
-      const nextAthlete = athleteSession(account);
-      setAthlete(nextAthlete);
-      setJSON(AUTH_KEY, nextAthlete);
-      toast('Login realizado.');
-      setTimeout(() => { window.location.href = 'minhas-inscricoes.html'; }, 500);
-      return;
-    }
-    const nextAthlete = {
-      name: String(form.get('name') || '').trim(),
-      email,
-      phone: String(form.get('phone') || '').trim(),
-      city: String(form.get('city') || '').trim()
-    };
-    if (athlete) {
-      const updatedAthlete = { ...nextAthlete, verifiedAt: athlete.verifiedAt || new Date().toISOString() };
-      const accounts = getJSON(ATHLETE_ACCOUNTS_KEY, []);
-      const nextAccounts = accounts.map(account => normalizeEmail(account.email) === normalizeEmail(athlete.email) ? { ...account, ...nextAthlete, password, verifiedAt: account.verifiedAt || updatedAthlete.verifiedAt } : account);
-      setJSON(ATHLETE_ACCOUNTS_KEY, nextAccounts);
-      setAthlete(updatedAthlete);
-      setJSON(AUTH_KEY, updatedAthlete);
-      toast('Perfil atualizado.');
-      setTimeout(() => { window.location.href = 'minhas-inscricoes.html'; }, 500);
-      return;
-    }
-    const accounts = getJSON(ATHLETE_ACCOUNTS_KEY, []);
-    if (accounts.some(account => normalizeEmail(account.email) === normalizeEmail(email))) {
-      toast('Este e-mail ja possui uma conta ativa.');
-      return;
-    }
-    const token = createToken();
-    const confirmationUrl = new URL(`confirmar-email.html?token=${encodeURIComponent(token)}`, window.location.href).href;
-    const pendingAthlete = {
-      ...nextAthlete,
-      password,
-      token,
-      confirmationUrl,
-      createdAt: new Date().toISOString()
-    };
-    const pendingAccounts = getJSON(ATHLETE_PENDING_KEY, []).filter(item => normalizeEmail(item.email) !== normalizeEmail(email));
-    setJSON(ATHLETE_PENDING_KEY, [pendingAthlete, ...pendingAccounts]);
     setSending(true);
-    setConfirmationLink('');
     setConfirmationNotice('');
     try {
-      await sendConfirmationEmail(pendingAthlete);
-      setConfirmationNotice('Enviamos um link de confirmacao para o seu e-mail. Abra a mensagem para ativar a conta.');
-      toast('E-mail de confirmacao enviado.');
-      e.currentTarget.reset();
+      if (isLogin) {
+        const data = await apiRequest('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ login: email, password, audience: 'athlete' })
+        });
+        setAthlete(data.user);
+        toast('Login realizado.');
+        setTimeout(() => { window.location.href = 'minhas-inscricoes.html'; }, 500);
+      } else if (athlete) {
+        const data = await apiRequest('/api/auth/profile', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: String(form.get('name') || '').trim(),
+            phone: String(form.get('phone') || '').trim(),
+            city: String(form.get('city') || '').trim(),
+            password
+          })
+        });
+        setAthlete(data.user);
+        toast('Perfil atualizado.');
+        setTimeout(() => { window.location.href = 'minhas-inscricoes.html'; }, 500);
+      } else {
+        await apiRequest('/api/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: String(form.get('name') || '').trim(),
+            email,
+            phone: String(form.get('phone') || '').trim(),
+            city: String(form.get('city') || '').trim(),
+            password
+          })
+        });
+        setConfirmationNotice('Enviamos um link de confirmacao para o seu e-mail. Abra a mensagem para ativar a conta.');
+        toast('E-mail de confirmacao enviado.');
+        e.currentTarget.reset();
+      }
     } catch (error) {
-      setConfirmationNotice(`Nao foi possivel enviar o e-mail automaticamente: ${error.message}. Use o link abaixo para testar a ativacao.`);
-      setConfirmationLink(confirmationUrl);
-      toast('Cadastro pendente. Configure o envio de e-mail na Vercel.');
+      toast(error.message);
     } finally {
       setSending(false);
     }
@@ -514,14 +472,13 @@ function AuthPage({ type, athlete, setAthlete, toast }) {
       <section className="auth-panel">
         <form className="auth-card" onSubmit={submit}>
           <div className="auth-card-head"><span>{isLogin ? 'Login' : 'Cadastro'}</span><h2>{isLogin ? 'Bem-vindo de volta' : 'Dados do atleta'}</h2><p>{isLogin ? 'Use seu e-mail e senha para entrar na área do atleta.' : 'Preencha seus dados para participar dos eventos.'}</p></div>
-          {confirmationNotice && <div className="auth-alert"><strong>Confirmação de e-mail</strong><p>{confirmationNotice}</p>{confirmationLink && <a href={confirmationLink}>{confirmationLink}</a>}</div>}
+          {confirmationNotice && <div className="auth-alert"><strong>Confirmação de e-mail</strong><p>{confirmationNotice}</p></div>}
           <div className="form-grid">
             {!isLogin && <div className="field full"><label>Nome completo</label><input className="input" name="name" required placeholder="Seu nome" defaultValue={athlete?.name || ''} /></div>}
-            <div className="field full"><label>E-mail</label><input className="input" name="email" required type="email" placeholder="voce@email.com" defaultValue={athlete?.email || ''} /></div>
+            <div className="field full"><label>E-mail</label><input className="input" name="email" required type="email" placeholder="voce@email.com" defaultValue={athlete?.email || ''} readOnly={Boolean(athlete && !isLogin)} /></div>
             {!isLogin && <><div className="field full"><label>Telefone</label><input className="input" name="phone" required placeholder="(91) 99999-0000" defaultValue={athlete?.phone || ''} /></div><div className="field full"><label>Cidade/UF</label><input className="input" name="city" required placeholder="Belém/PA" defaultValue={athlete?.city || DEMO_USER.city} /></div></>}
-            <div className="field full"><label>Senha</label><input className="input" name="password" required type="password" placeholder="••••••••" /></div>
+            <div className="field full"><label>{athlete && !isLogin ? 'Senha atual' : 'Senha'}</label><input className="input" name="password" required type="password" minLength={isLogin ? undefined : 12} maxLength="128" placeholder="••••••••••••" autoComplete={isLogin ? 'current-password' : athlete ? 'current-password' : 'new-password'} /></div>
           </div>
-          {isLogin && <div className="auth-help-row"><label><input type="checkbox" defaultChecked /> Lembrar acesso</label><a href="#">Esqueci minha senha</a></div>}
           <button className="btn btn-primary btn-block auth-submit" type="submit" disabled={sending}>{sending ? 'Enviando...' : isLogin ? 'Entrar' : athlete ? 'Salvar perfil' : 'Cadastrar atleta'}</button>
           <div className="auth-divider"><span>ou</span></div>
           <div className="auth-links">{isLogin ? <><span>Ainda não tem cadastro?</span><a href="cadastro.html">Criar conta</a></> : <><span>Já possui cadastro?</span><a href="login.html">Entrar agora</a></>}</div>
@@ -533,39 +490,29 @@ function AuthPage({ type, athlete, setAthlete, toast }) {
 }
 
 function ConfirmEmailPage({ setAthlete }) {
+  const confirmStarted = useRef(false);
   const [status, setStatus] = useState({
     type: 'loading',
     title: 'Confirmando e-mail',
     message: 'Estamos validando o link de confirmação.'
   });
   useEffect(() => {
+    if (confirmStarted.current) return;
+    confirmStarted.current = true;
     const token = new URLSearchParams(window.location.search).get('token');
     if (!token) {
       setStatus({ type: 'error', title: 'Link inválido', message: 'O link de confirmação não possui token.' });
       return;
     }
-    const pendingAccounts = getJSON(ATHLETE_PENDING_KEY, []);
-    const pending = pendingAccounts.find(account => account.token === token);
-    if (!pending) {
-      setStatus({ type: 'error', title: 'Link expirado ou já utilizado', message: 'Solicite um novo cadastro ou tente entrar com a conta já confirmada.' });
-      return;
-    }
-    const verifiedAt = new Date().toISOString();
-    const account = {
-      name: pending.name,
-      email: pending.email,
-      phone: pending.phone,
-      city: pending.city,
-      password: pending.password,
-      verifiedAt
-    };
-    const accounts = getJSON(ATHLETE_ACCOUNTS_KEY, []).filter(item => normalizeEmail(item.email) !== normalizeEmail(account.email));
-    setJSON(ATHLETE_ACCOUNTS_KEY, [account, ...accounts]);
-    setJSON(ATHLETE_PENDING_KEY, pendingAccounts.filter(item => item.token !== token));
-    const nextAthlete = athleteSession(account);
-    setAthlete(nextAthlete);
-    setJSON(AUTH_KEY, nextAthlete);
-    setStatus({ type: 'success', title: 'Conta ativada', message: 'Seu e-mail foi confirmado e sua conta já está ativa.' });
+    apiRequest('/api/auth/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ token })
+    }).then((data) => {
+      setAthlete(data.user);
+      setStatus({ type: 'success', title: 'Conta ativada', message: 'Seu e-mail foi confirmado e sua conta já está ativa.' });
+    }).catch((error) => {
+      setStatus({ type: 'error', title: 'Link expirado ou já utilizado', message: error.message });
+    });
   }, [setAthlete]);
   return (
     <main className="container page">
@@ -593,7 +540,7 @@ function ContactPage() {
       '',
       form.get('message') || ''
     ].join('\n'));
-    window.location.href = `mailto:${BASE_ADMIN.email}?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
     setSent(true);
     event.currentTarget.reset();
   };
@@ -724,6 +671,11 @@ function OrganizerCreateSection({ organizer, organizerEvents, setOrganizerEvents
   const submit = (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    const externalUrl = String(form.get('externalUrl') || '').trim();
+    if (form.get('registrationMode') === 'external' && !isSafeHttpUrl(externalUrl)) {
+      toast('Informe um link externo HTTP ou HTTPS valido.');
+      return;
+    }
     const eventDraft = {
       id: 'org-' + Date.now(),
       name: form.get('eventName'),
@@ -733,7 +685,7 @@ function OrganizerCreateSection({ organizer, organizerEvents, setOrganizerEvents
       slots: form.get('eventSlots'),
       banner,
       registrationMode: form.get('registrationMode'),
-      externalUrl: form.get('externalUrl'),
+      externalUrl,
       price: form.get('eventPrice'),
       paymentMethods: form.getAll('paymentMethods'),
       routeStart: form.get('routeStart'),
@@ -750,6 +702,12 @@ function OrganizerCreateSection({ organizer, organizerEvents, setOrganizerEvents
   const readBanner = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type) || file.size > 2 * 1024 * 1024) {
+      e.target.value = '';
+      toast('Use uma imagem PNG, JPEG ou WebP de ate 2 MB.');
+      return;
+    }
     const reader = new FileReader();
     reader.addEventListener('load', () => setBanner(reader.result));
     reader.readAsDataURL(file);
@@ -775,18 +733,18 @@ function OrganizerCreateSection({ organizer, organizerEvents, setOrganizerEvents
             <div className="field"><label>Horário de largada</label><input className="input" name="eventTime" required type="time" /></div>
             <div className="field"><label>Cidade/UF</label><input className="input" name="eventCity" required placeholder="Belém/PA" /></div>
             <div className="field"><label>Limite de inscrições</label><input className="input" name="eventSlots" type="number" min="1" placeholder="1000" /></div>
-            <div className="field full"><label>Banner do evento</label><input className="input" name="eventBanner" type="file" accept="image/*" onChange={readBanner} /></div>
+            <div className="field full"><label>Banner do evento</label><input className="input" name="eventBanner" type="file" accept="image/png,image/jpeg,image/webp" onChange={readBanner} /></div>
           </div>
           <h3>Inscrições</h3>
           <div className="form-grid">
             <div className="field"><label>Modo de inscrição</label><select className="select" name="registrationMode" value={mode} onChange={e => setMode(e.target.value)}><option value="native">Nativo pelo nosso site</option><option value="external">Link de outro site</option></select></div>
             <div className="field"><label>Valor base</label><input className="input" name="eventPrice" type="number" min="0" step="0.01" placeholder="135.00" /></div>
-            {mode === 'external' && <div className="field full"><label>Link de inscrição externa</label><input className="input" name="externalUrl" type="url" placeholder="https://site-do-organizador.com/inscricao" /></div>}
+            {mode === 'external' && <div className="field full"><label>Link de inscrição externa</label><input className="input" name="externalUrl" type="url" maxLength="500" placeholder="https://site-do-organizador.com/inscricao" /></div>}
           </div>
           <h3>Pagamento Mercado Pago</h3>
           <div className="form-grid">
             <div className="field full"><label>Public Key</label><input className="input" name="mercadoPagoPublicKey" placeholder="APP_USR-..." /></div>
-            <div className="field full"><label>Access Token / API</label><input className="input" name="mercadoPagoToken" type="password" placeholder="Configure em ambiente seguro" /></div>
+            <div className="field full"><label>Access Token / API</label><input className="input" value="Configurado somente no servidor" readOnly /></div>
             <div className="field full"><label>Formas de pagamento</label><div className="checkbox-grid"><label><input type="checkbox" name="paymentMethods" value="Pix" defaultChecked /> Pix</label><label><input type="checkbox" name="paymentMethods" value="Cartão de crédito" defaultChecked /> Cartão de crédito</label><label><input type="checkbox" name="paymentMethods" value="Boleto" /> Boleto</label></div></div>
           </div>
           <h3>Percurso</h3>
@@ -812,60 +770,51 @@ function OrganizerCreateSection({ organizer, organizerEvents, setOrganizerEvents
   );
 }
 
-function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerEvents, organizerRequests, setOrganizerRequests, approvedOrganizers, toast }) {
+function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerEvents, toast }) {
   const [authMode, setAuthMode] = useState('login');
-  const submitLogin = (e) => {
+  const [sending, setSending] = useState(false);
+  const submitLogin = async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const login = String(form.get('login') || '').trim();
     const password = String(form.get('password') || '');
-    const isBaseAdmin = (
-      login.toLowerCase() === BASE_ADMIN.login.toLowerCase() ||
-      normalizeEmail(login) === normalizeEmail(BASE_ADMIN.email)
-    ) && password === BASE_ADMIN.password;
-    if (isBaseAdmin) {
-      const next = { name: BASE_ADMIN.name, email: BASE_ADMIN.email, company: BASE_ADMIN.company, role: BASE_ADMIN.role };
-      setOrganizer(next);
-      setJSON(ORGANIZER_AUTH_KEY, next);
-      toast('Login do admin realizado.');
+    setSending(true);
+    try {
+      const data = await apiRequest('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ login, password, audience: 'organizer' })
+      });
+      setOrganizer(data.user);
+      toast(data.user.role === 'admin' ? 'Login do admin realizado.' : 'Login do organizador realizado.');
       setTimeout(() => { window.location.href = 'admin.html'; }, 450);
-      return;
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      setSending(false);
     }
-    const approved = approvedOrganizers.find(item => normalizeEmail(item.email) === normalizeEmail(login) && String(item.password || '') === password);
-    if (approved) {
-      const next = { id: approved.id, name: approved.name, email: approved.email, company: approved.company, role: 'organizer' };
-      setOrganizer(next);
-      setJSON(ORGANIZER_AUTH_KEY, next);
-      toast('Login do organizador realizado.');
-      setTimeout(() => { window.location.href = 'admin.html'; }, 450);
-      return;
-    }
-    const pending = organizerRequests.find(item => normalizeEmail(item.email) === normalizeEmail(login) && item.status === 'pending');
-    toast(pending ? 'Seu pedido ainda aguarda aprovacao do admin.' : 'Login ou senha invalidos.');
   };
-  const submitSignup = (e) => {
+  const submitSignup = async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    const email = String(form.get('email') || '').trim();
-    const duplicateApproved = approvedOrganizers.some(item => normalizeEmail(item.email) === normalizeEmail(email));
-    const duplicatePending = organizerRequests.some(item => normalizeEmail(item.email) === normalizeEmail(email) && item.status === 'pending');
-    if (duplicateApproved) return toast('Este e-mail ja possui acesso de organizador.');
-    if (duplicatePending) return toast('Ja existe um pedido pendente para este e-mail.');
-    const request = {
-      id: 'req-' + Date.now(),
-      company: String(form.get('company') || '').trim(),
-      name: String(form.get('name') || '').trim(),
-      email,
-      password: String(form.get('password') || ''),
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
-    const next = [request, ...organizerRequests];
-    setOrganizerRequests(next);
-    setJSON(ORGANIZER_REQUESTS_KEY, next);
-    setAuthMode('login');
-    e.currentTarget.reset();
-    toast('Pedido enviado. Aguarde aprovacao do admin.');
+    setSending(true);
+    try {
+      await apiRequest('/api/organizer-requests', {
+        method: 'POST',
+        body: JSON.stringify({
+          company: String(form.get('company') || '').trim(),
+          name: String(form.get('name') || '').trim(),
+          email: String(form.get('email') || '').trim(),
+          password: String(form.get('password') || '')
+        })
+      });
+      setAuthMode('login');
+      e.currentTarget.reset();
+      toast('Pedido enviado. Aguarde aprovacao do admin.');
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      setSending(false);
+    }
   };
   return (
     <main>
@@ -878,7 +827,7 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
             <div className="organizer-login-card" id="organizerAccess">
               <img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" />
               <div className="organizer-auth-tabs"><button className={authMode === 'login' ? 'active' : ''} type="button" onClick={() => setAuthMode('login')}>Login</button><button className={authMode === 'signup' ? 'active' : ''} type="button" onClick={() => setAuthMode('signup')}>Cadastro</button></div>
-              {authMode === 'login' ? <form onSubmit={submitLogin}><h2>Login do organizador</h2><div className="field"><label>Login ou e-mail</label><input className="input" name="login" type="text" placeholder="Admin ou organizador@email.com" required /></div><div className="field"><label>Senha</label><input className="input" name="password" type="password" placeholder="••••••••" required /></div><button className="btn btn-primary btn-block" type="submit">Entrar no painel</button></form> : <form onSubmit={submitSignup}><h2>Solicitar conta de organizador</h2><div className="field"><label>Nome da empresa</label><input className="input" name="company" placeholder="Nome da organização" required /></div><div className="field"><label>Responsável</label><input className="input" name="name" placeholder="Seu nome" required /></div><div className="field"><label>E-mail</label><input className="input" name="email" type="email" placeholder="organizador@email.com" required /></div><div className="field"><label>Senha</label><input className="input" name="password" type="password" placeholder="••••••••" required /></div><button className="btn btn-primary btn-block" type="submit">Enviar pedido</button></form>}
+              {authMode === 'login' ? <form onSubmit={submitLogin}><h2>Login do organizador</h2><div className="field"><label>Login ou e-mail</label><input className="input" name="login" type="text" placeholder="Admin ou organizador@email.com" autoComplete="username" required /></div><div className="field"><label>Senha</label><input className="input" name="password" type="password" maxLength="128" placeholder="••••••••••••" autoComplete="current-password" required /></div><button className="btn btn-primary btn-block" type="submit" disabled={sending}>{sending ? 'Entrando...' : 'Entrar no painel'}</button></form> : <form onSubmit={submitSignup}><h2>Solicitar conta de organizador</h2><div className="field"><label>Nome da empresa</label><input className="input" name="company" maxLength="180" placeholder="Nome da organização" required /></div><div className="field"><label>Responsável</label><input className="input" name="name" maxLength="160" placeholder="Seu nome" required /></div><div className="field"><label>E-mail</label><input className="input" name="email" type="email" maxLength="254" placeholder="organizador@email.com" required /></div><div className="field"><label>Senha</label><input className="input" name="password" type="password" minLength="12" maxLength="128" placeholder="••••••••••••" autoComplete="new-password" required /></div><button className="btn btn-primary btn-block" type="submit" disabled={sending}>{sending ? 'Enviando...' : 'Enviar pedido'}</button></form>}
             </div>
           )}
         </div>
@@ -888,7 +837,7 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
   );
 }
 
-function AdminPage({ organizer, setOrganizer, registrations, organizerRequests, setOrganizerRequests, approvedOrganizers, setApprovedOrganizers, toast }) {
+function AdminPage({ organizer, setOrganizer, registrations, organizerRequests, setOrganizerRequests, authLoading, toast }) {
   const page = currentPage();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -904,6 +853,9 @@ function AdminPage({ organizer, setOrganizer, registrations, organizerRequests, 
     'admin-configuracoes.html': ['config', 'Configurações', 'Dados do organizador e integrações do painel.']
   };
   const [active, title, description] = adminPages[page] || adminPages['admin.html'];
+  if (authLoading) {
+    return <main className="container page"><section className="card access-denied"><h2>Validando acesso</h2><p>Aguarde um instante.</p></section></main>;
+  }
   if (!organizer || !['admin', 'organizer'].includes(organizer.role)) {
     return (
       <main className="container page">
@@ -926,7 +878,7 @@ function AdminPage({ organizer, setOrganizer, registrations, organizerRequests, 
   }];
   const exportCSV = () => {
     const rows = [['numero', 'atleta', 'email', 'evento', 'percurso', 'camisa', 'valor', 'status']].concat(regs.map(reg => [reg.id, reg.name, reg.email, reg.eventTitle, reg.distance, reg.shirt, reg.amount, reg.status]));
-    const csv = rows.map(row => row.map(value => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
+    const csv = rows.map(row => row.map(csvCell).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -938,46 +890,34 @@ function AdminPage({ organizer, setOrganizer, registrations, organizerRequests, 
     URL.revokeObjectURL(url);
     toast('CSV gerado.');
   };
-  const logout = () => {
-    localStorage.removeItem(ORGANIZER_AUTH_KEY);
-    setOrganizer(null);
-    toast('Você saiu do painel administrativo.');
-    setTimeout(() => { window.location.href = 'organizador.html'; }, 450);
+  const logout = async () => {
+    try {
+      await apiRequest('/api/auth/logout', { method: 'POST' });
+    } finally {
+      setOrganizer(null);
+      toast('Você saiu do painel administrativo.');
+      setTimeout(() => { window.location.href = 'organizador.html'; }, 450);
+    }
   };
-  const approveRequest = (requestId) => {
+  const approveRequest = async (requestId) => {
     if (!isBaseAdmin) return toast('Apenas o admin base pode aprovar organizadores.');
-    const request = organizerRequests.find(item => item.id === requestId);
-    if (!request) return toast('Pedido nao encontrado.');
-    const reviewedAt = new Date().toISOString();
-    const nextRequests = organizerRequests.map(item => item.id === requestId ? {
-      ...item,
-      status: 'approved',
-      approvedAt: reviewedAt,
-      approvedBy: organizer.email
-    } : item);
-    const alreadyApproved = approvedOrganizers.some(item => normalizeEmail(item.email) === normalizeEmail(request.email));
-    const approvedUser = {
-      id: 'org-' + request.id,
-      name: request.name,
-      email: request.email,
-      company: request.company,
-      password: request.password,
-      role: 'organizer',
-      approvedAt: reviewedAt
-    };
-    const nextApproved = alreadyApproved ? approvedOrganizers : [approvedUser, ...approvedOrganizers];
-    setOrganizerRequests(nextRequests);
-    setApprovedOrganizers(nextApproved);
-    setJSON(ORGANIZER_REQUESTS_KEY, nextRequests);
-    setJSON(APPROVED_ORGANIZERS_KEY, nextApproved);
-    toast('Organizador aprovado.');
+    try {
+      await apiRequest('/api/organizer-requests/approve', {
+        method: 'POST',
+        body: JSON.stringify({ requestId })
+      });
+      setOrganizerRequests(items => items.map(item => item.id === requestId ? { ...item, status: 'approved', reviewed_at: new Date().toISOString() } : item));
+      toast('Organizador aprovado.');
+    } catch (error) {
+      toast(error.message);
+    }
   };
   const content = {
     dashboard: <><div className="admin-cards" id="dashboard"><div className="kpi"><span>Eventos ativos</span><strong>{activeEvents}</strong></div><div className="kpi"><span>Eventos passados</span><strong>{pastEvents}</strong></div><div className="kpi"><span>Rendimento total</span><strong>{money(totalRevenue)}</strong></div><div className="kpi"><span>Rendimento total</span><strong>{money(totalRevenue)}</strong></div></div><section className="card"><h3>Atalhos rápidos</h3><div className="stat-grid"><a className="stat" href="admin-eventos.html"><strong>Eventos</strong><span>ver calendário</span></a><a className="stat" href="admin-inscritos.html"><strong>Inscritos</strong><span>consultar atletas</span></a><a className="stat" href="admin-financeiro.html"><strong>Financeiro</strong><span>acompanhar valores</span></a></div></section></>,
     eventos: <section className="card"><h3>Eventos</h3><div className="table-wrap"><table className="data-table"><thead><tr><th>Evento</th><th>Cidade</th><th>Data</th><th>Status</th><th>Ações</th></tr></thead><tbody>{EVENTS.map(event => <tr key={event.id}><td><strong>{event.title}</strong><br /><small>{event.category}</small></td><td>{event.city}/{event.state}</td><td>{dateBR(event.date)}</td><td><span className={`badge ${statusClass(event.status)}`}>{event.badge}</span></td><td><a className="btn btn-outline btn-small" href={`evento.html?evento=${event.slug}`}>Abrir</a></td></tr>)}</tbody></table></div></section>,
     inscritos: <section className="card"><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><h3 style={{ margin: 0 }}>Inscritos recentes</h3><button className="btn btn-outline btn-small" type="button" onClick={exportCSV}>Exportar CSV</button></div><div className="table-wrap" style={{ marginTop: 12 }}><table className="data-table"><thead><tr><th>Número</th><th>Atleta</th><th>Evento</th><th>Percurso</th><th>Valor</th><th>Status</th></tr></thead><tbody>{regs.map(reg => <tr key={reg.id}><td>{reg.id}</td><td><strong>{reg.name}</strong><br /><small>{reg.email}</small></td><td>{reg.eventTitle}</td><td>{reg.distance}</td><td>{money(reg.amount)}</td><td><span className="badge warning">{reg.status}</span></td></tr>)}</tbody></table></div></section>,
     financeiro: <><section className="card"><h3>Resumo financeiro</h3><div className="stat-grid"><div className="stat"><strong>{money(revenue)}</strong><span>valor em inscrições</span></div><div className="stat"><strong>{regs.length}</strong><span>pagamentos pendentes</span></div><div className="stat"><strong>{money(regs.length ? revenue / regs.length : 0)}</strong><span>ticket médio</span></div></div></section><section className="card"><h3>Pagamentos</h3><p style={{ color: 'var(--muted)', marginTop: 0 }}>Esta tela está preparada para receber dados reais do Mercado Pago, repasses e conciliação.</p></section></>,
-    config: <><section className="card"><h3>Configurações</h3><div className="form-grid"><div className="field"><label>Organizador</label><input className="input" value={organizer?.company || 'ChipBelém'} readOnly /></div><div className="field"><label>E-mail de contato</label><input className="input" value={organizer?.email || 'contato@chipbelem.com.br'} readOnly /></div><div className="field full"><label>Integração Mercado Pago</label><input className="input" value="Configure as chaves no cadastro do evento" readOnly /></div></div></section>{isBaseAdmin ? <section className="card"><h3>Pedidos de organizador</h3><p className="admin-role-note">A conta base aprova quem pode acessar o painel como organizador.</p>{pendingRequests.length ? <div className="approval-list">{pendingRequests.map(request => <article className="approval-card" key={request.id}><div><strong>{request.company}</strong><span>{request.name} - {request.email}</span><small>Pedido enviado em {formatDateTime(request.createdAt)}</small></div><button className="btn btn-primary btn-small" type="button" onClick={() => approveRequest(request.id)}>Aprovar</button></article>)}</div> : <div className="empty">Nenhum pedido pendente.</div>}</section> : <section className="card"><h3>Aprovação de organizadores</h3><p className="admin-role-note">Somente a conta base pode aprovar novos organizadores.</p></section>}</>
+    config: <><section className="card"><h3>Configurações</h3><div className="form-grid"><div className="field"><label>Organizador</label><input className="input" value={organizer?.company || 'ChipBelém'} readOnly /></div><div className="field"><label>E-mail de contato</label><input className="input" value={organizer?.email || 'contato@chipbelem.com.br'} readOnly /></div><div className="field full"><label>Integração Mercado Pago</label><input className="input" value="Credencial secreta configurada somente no servidor" readOnly /></div></div></section>{isBaseAdmin ? <section className="card"><h3>Pedidos de organizador</h3><p className="admin-role-note">A conta base aprova quem pode acessar o painel como organizador.</p>{pendingRequests.length ? <div className="approval-list">{pendingRequests.map(request => <article className="approval-card" key={request.id}><div><strong>{request.company}</strong><span>{request.name} - {request.email}</span><small>Pedido enviado em {formatDateTime(request.created_at)}</small></div><button className="btn btn-primary btn-small" type="button" onClick={() => approveRequest(request.id)}>Aprovar</button></article>)}</div> : <div className="empty">Nenhum pedido pendente.</div>}</section> : <section className="card"><h3>Aprovação de organizadores</h3><p className="admin-role-note">Somente a conta base pode aprovar novos organizadores.</p></section>}</>
   };
   return (
     <main className="container page">
@@ -1001,37 +941,64 @@ function Toast({ message }) {
 }
 
 export default function App() {
-  const [athlete, setAthlete] = useState(() => getJSON(AUTH_KEY, null));
-  const [organizer, setOrganizer] = useState(() => getStoredOrganizer());
-  const [registrations, setRegistrations] = useState(() => getJSON(REGISTRATION_KEY, []));
+  const [athlete, setAthlete] = useState(null);
+  const [organizer, setOrganizer] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [registrations, setRegistrations] = useState([]);
   const [organizerEvents, setOrganizerEvents] = useState(() => getJSON(ORGANIZER_EVENTS_KEY, []));
-  const [organizerRequests, setOrganizerRequests] = useState(() => getJSON(ORGANIZER_REQUESTS_KEY, []));
-  const [approvedOrganizers, setApprovedOrganizers] = useState(() => getJSON(APPROVED_ORGANIZERS_KEY, []));
+  const [organizerRequests, setOrganizerRequests] = useState([]);
   const [toastMessage, setToastMessage] = useState('');
   const page = currentPage();
+  useEffect(() => {
+    let active = true;
+    apiRequest('/api/auth/session').then(async ({ user }) => {
+      if (!active || !user) return;
+      if (user.role === 'athlete') setAthlete(user);
+      if (['organizer', 'admin'].includes(user.role)) setOrganizer(user);
+      if (user.role === 'admin') {
+        try {
+          const data = await apiRequest('/api/organizer-requests');
+          if (active) setOrganizerRequests(data.requests || []);
+        } catch {
+          if (active) setOrganizerRequests([]);
+        }
+      }
+    }).catch(() => {
+      if (active) {
+        setAthlete(null);
+        setOrganizer(null);
+      }
+    }).finally(() => {
+      if (active) setAuthLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
   const toast = (message) => {
     setToastMessage(message);
     setTimeout(() => setToastMessage(''), 2600);
   };
-  const logoutAthlete = () => {
-    localStorage.removeItem(AUTH_KEY);
-    setAthlete(null);
-    toast('Você saiu da conta.');
-    setTimeout(() => { window.location.href = 'index.html'; }, 450);
+  const logoutAthlete = async () => {
+    try {
+      await apiRequest('/api/auth/logout', { method: 'POST' });
+    } finally {
+      setAthlete(null);
+      toast('Você saiu da conta.');
+      setTimeout(() => { window.location.href = 'index.html'; }, 450);
+    }
   };
   const pageContent = useMemo(() => {
     if (page === 'index.html' || page === 'eventos.html') return <EventsPage />;
     if (page === 'evento.html') return <EventDetailPage />;
-    if (page === 'inscricao.html') return <CheckoutPage athlete={athlete} setAthlete={setAthlete} registrations={registrations} setRegistrations={setRegistrations} toast={toast} />;
+    if (page === 'inscricao.html') return <CheckoutPage athlete={athlete} registrations={registrations} setRegistrations={setRegistrations} toast={toast} />;
     if (page === 'login.html') return <AuthPage type="login" athlete={athlete} setAthlete={setAthlete} toast={toast} />;
     if (page === 'cadastro.html') return <AuthPage type="cadastro" athlete={athlete} setAthlete={setAthlete} toast={toast} />;
     if (page === 'confirmar-email.html') return <ConfirmEmailPage setAthlete={setAthlete} />;
     if (page === 'contato.html') return <ContactPage />;
     if (page === 'minhas-inscricoes.html') return <AthleteArea athlete={athlete} registrations={registrations} setAthlete={setAthlete} toast={toast} />;
-    if (page === 'organizador.html') return <OrganizerPage organizer={organizer} setOrganizer={setOrganizer} organizerEvents={organizerEvents} setOrganizerEvents={setOrganizerEvents} organizerRequests={organizerRequests} setOrganizerRequests={setOrganizerRequests} approvedOrganizers={approvedOrganizers} toast={toast} />;
-    if (page.startsWith('admin')) return <AdminPage organizer={organizer} setOrganizer={setOrganizer} registrations={registrations} organizerRequests={organizerRequests} setOrganizerRequests={setOrganizerRequests} approvedOrganizers={approvedOrganizers} setApprovedOrganizers={setApprovedOrganizers} toast={toast} />;
+    if (page === 'organizador.html') return <OrganizerPage organizer={organizer} setOrganizer={setOrganizer} organizerEvents={organizerEvents} setOrganizerEvents={setOrganizerEvents} toast={toast} />;
+    if (page.startsWith('admin')) return <AdminPage organizer={organizer} setOrganizer={setOrganizer} registrations={registrations} organizerRequests={organizerRequests} setOrganizerRequests={setOrganizerRequests} authLoading={authLoading} toast={toast} />;
     return <EventsPage />;
-  }, [page, athlete, organizer, registrations, organizerEvents, organizerRequests, approvedOrganizers]);
+  }, [page, athlete, organizer, authLoading, registrations, organizerEvents, organizerRequests]);
 
   return (
     <Layout athlete={athlete} organizer={organizer} onAthleteLogout={logoutAthlete}>
