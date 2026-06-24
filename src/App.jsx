@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DEMO_USER, EVENTS, SHIRT_SIZES } from './data.js';
 
-const ORGANIZER_EVENTS_KEY = 'chipbelem_organizer_events';
 const CONTACT_EMAIL = 'Alexandre.duraes.soares@gmail.com';
 
 const money = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -11,22 +10,24 @@ const currentPage = () => {
   const page = window.location.pathname.split('/').pop() || 'index.html';
   return page === '' ? 'index.html' : page;
 };
-const getJSON = (key, fallback) => {
-  try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
-  catch { return fallback; }
-};
-const setJSON = (key, value) => localStorage.setItem(key, JSON.stringify(value));
 const assetUrl = (path = '') => {
   const value = String(path);
   if (/^(https?:|data:|blob:)/.test(value)) return value;
   return `${import.meta.env.BASE_URL}${value.replace(/^\/+/, '')}`;
 };
 const apiRequest = async (path, options = {}) => {
-  const response = await fetch(path, {
-    credentials: 'include',
-    ...options,
-    headers: options.body ? { 'Content-Type': 'application/json', ...(options.headers || {}) } : options.headers
-  });
+  let response;
+  try {
+    response = await fetch(path, {
+      credentials: 'include',
+      ...options,
+      headers: options.body ? { 'Content-Type': 'application/json', ...(options.headers || {}) } : options.headers
+    });
+  } catch {
+    const error = new Error('Nao foi possivel conectar ao servidor. Verifique sua internet e tente novamente.');
+    error.code = 'network_error';
+    throw error;
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(data.error || 'Nao foi possivel concluir a operacao.');
@@ -37,6 +38,56 @@ const apiRequest = async (path, options = {}) => {
   return data;
 };
 const formatDateTime = (value) => value ? new Date(value).toLocaleString('pt-BR') : '-';
+const formatDuration = (seconds) => {
+  if (seconds == null) return '-';
+  const hours = Math.floor(Number(seconds) / 3600);
+  const minutes = Math.floor((Number(seconds) % 3600) / 60);
+  const remaining = Number(seconds) % 60;
+  return [hours, minutes, remaining].map(value => String(value).padStart(2, '0')).join(':');
+};
+const normalizeOrganizerEvent = (event) => ({
+  ...event,
+  name: event.title,
+  date: event.event_date,
+  time: event.start_time,
+  banner: event.banner_url,
+  registrationMode: event.registration_mode,
+  externalUrl: event.external_registration_url,
+  slots: event.slots_limit
+});
+const normalizePublicEvent = (event) => {
+  const routes = (event.routes || []).map(route => ({
+    id: Number(route.id),
+    distance: route.name || `${Number(route.distance_km || 0)}K`,
+    start: String(event.start_time || '').slice(0, 5),
+    limit: event.slots_limit ? `${event.slots_limit} atletas` : 'Consulte o organizador',
+    category: event.category || 'Geral',
+    distanceKm: Number(route.distance_km || 0)
+  }));
+  const prices = (event.prices || []).map(price => ({
+    id: Number(price.id),
+    label: price.label,
+    price: Number(price.price || 0),
+    until: price.ends_at ? `até ${new Date(price.ends_at).toLocaleDateString('pt-BR')}` : 'lote disponível'
+  }));
+  return {
+    ...event,
+    id: Number(event.id),
+    date: String(event.event_date).slice(0, 10),
+    time: String(event.start_time || '').slice(0, 5),
+    image: event.banner_url || 'assets/bg-index.jpg',
+    badge: event.status === 'warning' ? 'Últimas vagas' : 'Inscrições abertas',
+    location: event.location || `${event.city}/${event.state}`,
+    distances: routes.map(route => route.distance),
+    routes,
+    prices: prices.length ? prices : [{ label: 'Inscrição', price: 0, until: 'gratuita' }],
+    kit: [],
+    rules: [],
+    contact: 'Entre em contato com o organizador',
+    registrationMode: event.registration_mode,
+    externalUrl: event.external_registration_url
+  };
+};
 const csvCell = (value) => {
   const text = String(value ?? '').replaceAll('"', '""');
   return `"${/^[=+\-@]/.test(text) ? `'${text}` : text}"`;
@@ -47,7 +98,7 @@ const isSafeHttpUrl = (value) => {
   catch { return false; }
 };
 const statusClass = (status) => ['open', 'warning', 'info'].includes(status) ? status : 'closed';
-const getEventBySlug = (slug) => EVENTS.find(event => event.slug === slug) || EVENTS[0];
+const getEventBySlug = (slug, events = EVENTS) => events.find(event => event.slug === slug) || events[0] || EVENTS[0];
 const initials = (name = '') => name.trim().split(/\s+/).slice(0, 2).map(part => part[0] || '').join('').toUpperCase() || 'AT';
 const distanceKm = (distance = '') => Number.parseInt(distance, 10) || 0;
 const estimateRouteKm = (startLat, startLng, finishLat, finishLng) => {
@@ -243,21 +294,88 @@ function HomePage() {
   );
 }
 
-function EventsPage() {
+function EventCarousel({ events }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const total = events.length;
+  const goTo = (index) => setActiveIndex((index + total) % total);
+
+  useEffect(() => {
+    if (paused || total < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const interval = window.setInterval(() => {
+      setActiveIndex((activeIndex + 1) % total);
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [activeIndex, paused, total]);
+
+  return (
+    <section
+      className="event-carousel"
+      aria-label="Eventos em destaque"
+      aria-roledescription="carrossel"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setPaused(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowLeft') goTo(activeIndex - 1);
+        if (event.key === 'ArrowRight') goTo(activeIndex + 1);
+      }}
+    >
+      <div className="event-carousel-viewport">
+        <span className="event-carousel-side-label left" aria-hidden="true">Destaques</span>
+        <div className="event-carousel-track" style={{ transform: `translateX(-${activeIndex * 100}%)` }}>
+          {events.map((event, index) => (
+            <article
+              className="event-carousel-slide"
+              aria-label={`${index + 1} de ${total}: ${event.title}`}
+              aria-hidden={index !== activeIndex}
+              key={event.id}
+            >
+              <a className="event-carousel-banner" href={`evento.html?evento=${event.slug}`} tabIndex={index === activeIndex ? 0 : -1} aria-label={`Abrir ${event.title}`}>
+                <img src={assetUrl(event.image)} alt={event.title} />
+              </a>
+            </article>
+          ))}
+        </div>
+        <span className="event-carousel-side-label right" aria-hidden="true">Destaques</span>
+        <button className="event-carousel-arrow previous" type="button" onClick={() => goTo(activeIndex - 1)} aria-label="Evento anterior" title="Evento anterior">‹</button>
+        <button className="event-carousel-arrow next" type="button" onClick={() => goTo(activeIndex + 1)} aria-label="Próximo evento" title="Próximo evento">›</button>
+      </div>
+      <div className="event-carousel-controls" aria-label="Selecionar evento">
+        {events.map((event, index) => (
+          <button
+            className={index === activeIndex ? 'active' : ''}
+            type="button"
+            onClick={() => goTo(index)}
+            aria-label={`Mostrar ${event.title}`}
+            aria-current={index === activeIndex ? 'true' : undefined}
+            key={event.id}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EventsPage({ events }) {
   const [query, setQuery] = useState('');
   const [state, setState] = useState('');
   const [city, setCity] = useState('');
   const [openOnly, setOpenOnly] = useState(false);
-  const states = [...new Set(EVENTS.map(event => event.state))];
-  const cities = [...new Set(EVENTS.map(event => event.city))];
-  const filtered = EVENTS.filter(event => (
+  const states = [...new Set(events.map(event => event.state))];
+  const cities = [...new Set(events.map(event => event.city))];
+  const filtered = events.filter(event => (
     (!query || `${event.title} ${event.city} ${event.category}`.toLowerCase().includes(query.toLowerCase())) &&
     (!state || event.state === state) &&
     (!city || event.city === city) &&
     (!openOnly || event.status === 'open')
   ));
   return (
-    <main className="container page">
+    <main className="container page events-page">
+      <EventCarousel events={events.slice(0, 6)} />
       <div className="section-head" style={{ marginTop: 0 }}>
         <div>
           <span className="eyebrow">Eventos disponíveis</span>
@@ -282,10 +400,10 @@ function EventsPage() {
   );
 }
 
-function EventDetailPage() {
+function EventDetailPage({ events }) {
   const [tab, setTab] = useState('info');
   const params = new URLSearchParams(window.location.search);
-  const event = getEventBySlug(params.get('evento'));
+  const event = getEventBySlug(params.get('evento'), events);
   const tabContent = {
     info: <><h3>Informações gerais</h3><p>{event.description}</p><p><strong>Endereço:</strong> {event.address}</p><p><strong>Contato:</strong> {event.contact}</p></>,
     percursos: <><h3>Percursos e categorias</h3><table className="route-table"><thead><tr><th>Distância</th><th>Largada</th><th>Limite</th><th>Categoria</th></tr></thead><tbody>{event.routes.map(route => <tr key={`${route.distance}-${route.category}`}><td>{route.distance}</td><td>{route.start}</td><td>{route.limit}</td><td>{route.category}</td></tr>)}</tbody></table></>,
@@ -316,7 +434,7 @@ function EventDetailPage() {
             <div className="price-list">
               {event.prices.map(price => <div className="price-row" key={price.label}><span><strong>{price.label}</strong><br /><small>{price.until}</small></span><strong>{money(price.price)}</strong></div>)}
             </div>
-            <a className="btn btn-primary btn-block" href={`inscricao.html?evento=${event.slug}`}>Inscrever-se agora</a>
+            <a className="btn btn-primary btn-block" href={event.registrationMode === 'external' ? event.externalUrl : `inscricao.html?evento=${event.slug}`} target={event.registrationMode === 'external' ? '_blank' : undefined} rel={event.registrationMode === 'external' ? 'noreferrer' : undefined}>Inscrever-se agora</a>
           </aside>
         </div>
       </article>
@@ -328,12 +446,13 @@ function EventDetailPage() {
   );
 }
 
-function CheckoutPage({ athlete, registrations, setRegistrations, toast }) {
+function CheckoutPage({ athlete, events, registrations, setRegistrations, toast }) {
   const params = new URLSearchParams(window.location.search);
-  const event = getEventBySlug(params.get('evento'));
+  const event = getEventBySlug(params.get('evento'), events);
   const basePrice = event.prices[0].price;
   const [success, setSuccess] = useState(false);
-  const submit = (e) => {
+  const [sending, setSending] = useState(false);
+  const submit = async (e) => {
     e.preventDefault();
     if (!athlete) {
       toast('Entre na sua conta antes de concluir a inscricao.');
@@ -341,6 +460,27 @@ function CheckoutPage({ athlete, registrations, setRegistrations, toast }) {
       return;
     }
     const form = new FormData(e.currentTarget);
+    if (Number.isSafeInteger(event.id)) {
+      setSending(true);
+      try {
+        const data = await apiRequest('/api/registrations', {
+          method: 'POST',
+          body: JSON.stringify({
+            eventId: event.id,
+            routeId: Number(form.get('distance')),
+            shirtSize: String(form.get('shirt') || '')
+          })
+        });
+        setSuccess(true);
+        toast(data.message);
+        e.currentTarget.reset();
+      } catch (error) {
+        toast(error.message);
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
     const registration = {
       id: 'CJ' + Math.floor(100000 + Math.random() * 900000),
       eventId: event.id,
@@ -376,12 +516,12 @@ function CheckoutPage({ athlete, registrations, setRegistrations, toast }) {
             <div className="field"><label>Telefone</label><input className="input" name="phone" required placeholder="(91) 99999-0000" defaultValue={athlete?.phone || ''} /></div>
             <div className="field"><label>Sexo</label><select className="select" name="gender" required><option value="">Selecione</option><option>Feminino</option><option>Masculino</option><option>Outro</option></select></div>
             <div className="field"><label>Equipe / assessoria</label><input className="input" name="team" placeholder="Opcional" /></div>
-            <div className="field"><label>Percurso</label><select className="select" name="distance" required>{event.distances.map(distance => <option key={distance}>{distance}</option>)}</select></div>
+            <div className="field"><label>Percurso</label><select className="select" name="distance" required>{event.routes.map(route => <option value={route.id || route.distance} key={route.id || route.distance}>{route.distance}</option>)}</select></div>
             <div className="field"><label>Camisa</label><select className="select" name="shirt" required>{SHIRT_SIZES.map(size => <option key={size}>{size}</option>)}</select></div>
             <div className="field full"><label>Contato de emergência</label><input className="input" name="emergency" placeholder="Nome e telefone" /></div>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
-            <button className="btn btn-primary" type="submit">Confirmar inscrição e pagar</button>
+            <button className="btn btn-primary" type="submit" disabled={sending}>{sending ? 'Criando inscrição...' : 'Confirmar inscrição e pagar'}</button>
             <a className="btn btn-outline" href={`evento.html?evento=${event.slug}`}>Voltar ao evento</a>
           </div>
           <div className={`success-box ${success ? 'show' : ''}`}>Inscrição criada com sucesso! Próxima etapa: pagamento via Mercado Pago.</div>
@@ -400,10 +540,29 @@ function CheckoutPage({ athlete, registrations, setRegistrations, toast }) {
   );
 }
 
-function AuthPage({ type, athlete, setAthlete, toast }) {
+function AuthPage({ type, athlete, setAthlete, setOrganizer, toast }) {
   const isLogin = type === 'login';
+  const isEditing = Boolean(athlete && !isLogin);
+  const [accountType, setAccountType] = useState('athlete');
   const [sending, setSending] = useState(false);
   const [confirmationNotice, setConfirmationNotice] = useState('');
+  const [resendEmail, setResendEmail] = useState('');
+  const resendConfirmation = async () => {
+    if (!resendEmail || sending) return;
+    setSending(true);
+    try {
+      const data = await apiRequest('/api/auth/resend', {
+        method: 'POST',
+        body: JSON.stringify({ email: resendEmail })
+      });
+      setConfirmationNotice(data.message);
+      toast('Novo link de confirmacao solicitado.');
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      setSending(false);
+    }
+  };
   const submit = async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -415,11 +574,20 @@ function AuthPage({ type, athlete, setAthlete, toast }) {
       if (isLogin) {
         const data = await apiRequest('/api/auth/login', {
           method: 'POST',
-          body: JSON.stringify({ login: email, password, audience: 'athlete' })
+          body: JSON.stringify({ login: email, password, audience: accountType })
         });
-        setAthlete(data.user);
+        if (data.user.role === 'athlete') {
+          setOrganizer(null);
+          setAthlete(data.user);
+        }
+        if (['organizer', 'admin'].includes(data.user.role)) {
+          setAthlete(null);
+          setOrganizer(data.user);
+        }
         toast('Login realizado.');
-        setTimeout(() => { window.location.href = 'minhas-inscricoes.html'; }, 500);
+        setTimeout(() => {
+          window.location.href = data.user.role === 'athlete' ? 'minhas-inscricoes.html' : 'admin.html';
+        }, 500);
       } else if (athlete) {
         const data = await apiRequest('/api/auth/profile', {
           method: 'POST',
@@ -437,18 +605,29 @@ function AuthPage({ type, athlete, setAthlete, toast }) {
         await apiRequest('/api/auth/register', {
           method: 'POST',
           body: JSON.stringify({
+            role: accountType,
             name: String(form.get('name') || '').trim(),
             email,
             phone: String(form.get('phone') || '').trim(),
             city: String(form.get('city') || '').trim(),
+            company: String(form.get('company') || '').trim(),
             password
           })
         });
-        setConfirmationNotice('Enviamos um link de confirmacao para o seu e-mail. Abra a mensagem para ativar a conta.');
+        setResendEmail(email);
+        setConfirmationNotice(accountType === 'organizer'
+          ? 'Enviamos o link de confirmacao. Depois de confirmar o e-mail, seu pedido sera analisado pela equipe.'
+          : 'Enviamos um link de confirmacao. Abra a mensagem para ativar sua conta.');
         toast('E-mail de confirmacao enviado.');
         e.currentTarget.reset();
       }
     } catch (error) {
+      if (error.code === 'email_unverified' || error.code === 'email_delivery_failed') {
+        setResendEmail(email);
+        setConfirmationNotice(error.message);
+      } else if (error.code === 'approval_pending') {
+        setConfirmationNotice('Seu e-mail ja foi confirmado. A conta de organizador ainda aguarda aprovacao da equipe.');
+      }
       toast(error.message);
     } finally {
       setSending(false);
@@ -459,9 +638,9 @@ function AuthPage({ type, athlete, setAthlete, toast }) {
       <section className="auth-visual" aria-label="ChipBelem">
         <a className="auth-brand" href="index.html" aria-label="Voltar para o início"><img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" /></a>
         <div className="auth-visual-content">
-          <span className="auth-kicker">Portal do atleta</span>
-          <h1>{isLogin ? 'Acesse sua conta' : 'Crie sua conta de atleta'}</h1>
-          <p>{isLogin ? 'Entre para acompanhar inscrições, comprovantes e próximas corridas em um só lugar.' : 'Cadastre seus dados uma vez e agilize suas inscrições nos próximos eventos.'}</p>
+          <span className="auth-kicker">Portal ChipBelem</span>
+          <h1>{isLogin ? 'Acesse sua conta' : 'Crie sua conta'}</h1>
+          <p>{accountType === 'athlete' ? 'Acompanhe inscrições, resultados e suas próximas corridas.' : 'Organize eventos, inscritos e informações financeiras em uma área protegida.'}</p>
           <div className="auth-visual-stats">
             <div><strong>{EVENTS.length}</strong><span>eventos</span></div>
             <div><strong>24h</strong><span>online</span></div>
@@ -471,15 +650,21 @@ function AuthPage({ type, athlete, setAthlete, toast }) {
       </section>
       <section className="auth-panel">
         <form className="auth-card" onSubmit={submit}>
-          <div className="auth-card-head"><span>{isLogin ? 'Login' : 'Cadastro'}</span><h2>{isLogin ? 'Bem-vindo de volta' : 'Dados do atleta'}</h2><p>{isLogin ? 'Use seu e-mail e senha para entrar na área do atleta.' : 'Preencha seus dados para participar dos eventos.'}</p></div>
-          {confirmationNotice && <div className="auth-alert"><strong>Confirmação de e-mail</strong><p>{confirmationNotice}</p></div>}
+          {!isEditing && <div className="account-type" aria-label="Tipo de conta">
+            <button className={accountType === 'athlete' ? 'active' : ''} type="button" onClick={() => setAccountType('athlete')} disabled={sending}>Atleta</button>
+            <button className={accountType === 'organizer' ? 'active' : ''} type="button" onClick={() => setAccountType('organizer')} disabled={sending}>Organizador</button>
+          </div>}
+          <div className="auth-card-head"><span>{isLogin ? 'Login' : 'Cadastro'}</span><h2>{isLogin ? 'Bem-vindo de volta' : 'Dados da conta'}</h2><p>Informe seus dados para acessar o perfil correto.</p></div>
+          {confirmationNotice && <div className="auth-alert"><strong>Situação da conta</strong><p>{confirmationNotice}</p></div>}
+          {confirmationNotice && resendEmail && <button className="auth-resend" type="button" onClick={resendConfirmation} disabled={sending}>Reenviar e-mail de confirmacao</button>}
           <div className="form-grid">
             {!isLogin && <div className="field full"><label>Nome completo</label><input className="input" name="name" required placeholder="Seu nome" defaultValue={athlete?.name || ''} /></div>}
-            <div className="field full"><label>E-mail</label><input className="input" name="email" required type="email" placeholder="voce@email.com" defaultValue={athlete?.email || ''} readOnly={Boolean(athlete && !isLogin)} /></div>
+            {!isLogin && !isEditing && accountType === 'organizer' && <div className="field full"><label>Nome da empresa ou organizacao</label><input className="input" name="company" required maxLength="180" placeholder="Nome da organizacao" /></div>}
+            <div className="field full"><label>{isLogin ? 'Login ou e-mail' : 'E-mail'}</label><input className="input" name="email" required type={isLogin ? 'text' : 'email'} placeholder={isLogin && accountType === 'organizer' ? 'Admin ou organizador@email.com' : 'voce@email.com'} defaultValue={athlete?.email || ''} readOnly={Boolean(athlete && !isLogin)} autoComplete="username" /></div>
             {!isLogin && <><div className="field full"><label>Telefone</label><input className="input" name="phone" required placeholder="(91) 99999-0000" defaultValue={athlete?.phone || ''} /></div><div className="field full"><label>Cidade/UF</label><input className="input" name="city" required placeholder="Belém/PA" defaultValue={athlete?.city || DEMO_USER.city} /></div></>}
             <div className="field full"><label>{athlete && !isLogin ? 'Senha atual' : 'Senha'}</label><input className="input" name="password" required type="password" minLength={isLogin ? undefined : 12} maxLength="128" placeholder="••••••••••••" autoComplete={isLogin ? 'current-password' : athlete ? 'current-password' : 'new-password'} /></div>
           </div>
-          <button className="btn btn-primary btn-block auth-submit" type="submit" disabled={sending}>{sending ? 'Enviando...' : isLogin ? 'Entrar' : athlete ? 'Salvar perfil' : 'Cadastrar atleta'}</button>
+          <button className="btn btn-primary btn-block auth-submit" type="submit" disabled={sending}>{sending ? 'Aguarde...' : isLogin ? 'Entrar' : athlete ? 'Salvar perfil' : `Cadastrar ${accountType === 'athlete' ? 'atleta' : 'organizador'}`}</button>
           <div className="auth-divider"><span>ou</span></div>
           <div className="auth-links">{isLogin ? <><span>Ainda não tem cadastro?</span><a href="cadastro.html">Criar conta</a></> : <><span>Já possui cadastro?</span><a href="login.html">Entrar agora</a></>}</div>
           <a className="auth-back-link" href="eventos.html">Ver eventos disponíveis</a>
@@ -489,7 +674,7 @@ function AuthPage({ type, athlete, setAthlete, toast }) {
   );
 }
 
-function ConfirmEmailPage({ setAthlete }) {
+function ConfirmEmailPage({ setAthlete, setOrganizer }) {
   const confirmStarted = useRef(false);
   const [status, setStatus] = useState({
     type: 'loading',
@@ -504,23 +689,27 @@ function ConfirmEmailPage({ setAthlete }) {
       setStatus({ type: 'error', title: 'Link inválido', message: 'O link de confirmação não possui token.' });
       return;
     }
+    let redirectTimer;
     apiRequest('/api/auth/confirm', {
       method: 'POST',
       body: JSON.stringify({ token })
     }).then((data) => {
-      setAthlete(data.user);
-      setStatus({ type: 'success', title: 'Conta ativada', message: 'Seu e-mail foi confirmado e sua conta já está ativa.' });
+      if (data.user?.role === 'athlete') setAthlete(data.user);
+      if (data.user && ['organizer', 'admin'].includes(data.user.role)) setOrganizer(data.user);
+      setStatus({ type: 'success', title: data.user ? 'Conta ativada' : 'E-mail confirmado', message: data.message, next: data.next });
+      redirectTimer = window.setTimeout(() => { window.location.href = data.next; }, 2200);
     }).catch((error) => {
       setStatus({ type: 'error', title: 'Link expirado ou já utilizado', message: error.message });
     });
-  }, [setAthlete]);
+    return () => window.clearTimeout(redirectTimer);
+  }, [setAthlete, setOrganizer]);
   return (
     <main className="container page">
       <section className={`card confirm-card ${status.type}`}>
         <h2>{status.title}</h2>
         <p>{status.message}</p>
         <div className="hero-actions" style={{ justifyContent: 'center' }}>
-          <a className="btn btn-primary" href="minhas-inscricoes.html">Ir para área do atleta</a>
+          <a className="btn btn-primary" href={status.next || 'login.html'}>{status.next?.startsWith('admin') ? 'Ir para o painel' : status.next?.startsWith('organizador') ? 'Acompanhar cadastro' : 'Ir para área do atleta'}</a>
           <a className="btn btn-outline" href="eventos.html">Ver eventos</a>
         </div>
       </section>
@@ -577,7 +766,7 @@ function ContactPage() {
   );
 }
 
-function AthleteArea({ athlete, registrations, setAthlete, toast }) {
+function AthleteArea({ athlete, athleteDashboard, setAthlete, toast }) {
   if (!athlete) {
     return (
       <main className="container page">
@@ -597,9 +786,9 @@ function AthleteArea({ athlete, registrations, setAthlete, toast }) {
       </main>
     );
   }
-  const myRegistrations = registrations.filter(reg => reg.email === athlete.email);
-  const totalKm = myRegistrations.reduce((sum, reg) => sum + distanceKm(reg.distance), 0);
-  const registeredSlugs = new Set(myRegistrations.map(reg => reg.eventSlug));
+  const myRegistrations = athleteDashboard?.registrations || [];
+  const stats = athleteDashboard?.stats || {};
+  const registeredSlugs = new Set(myRegistrations.map(reg => reg.event_slug));
   const suggestions = EVENTS.filter(event => !registeredSlugs.has(event.slug)).slice(0, 4);
   return (
     <main className="container page">
@@ -613,14 +802,16 @@ function AthleteArea({ athlete, registrations, setAthlete, toast }) {
         </aside>
         <main>
           <div className="stat-grid" id="performance">
-            <div className="stat"><strong>{myRegistrations.length}</strong><span>inscrições</span></div>
-            <div className="stat"><strong>{totalKm || 0}K</strong><span>km previstos</span></div>
+            <div className="stat"><strong>{Number(stats.registrations || 0)}</strong><span>inscrições</span></div>
+            <div className="stat"><strong>{Number(stats.participations || 0)}</strong><span>participações concluídas</span></div>
+            <div className="stat"><strong>{Number(stats.totalKm || 0).toFixed(1)}K</strong><span>km acumulados</span></div>
+            <div className="stat"><strong>{formatDuration(stats.averageTimeSeconds)}</strong><span>tempo médio</span></div>
           </div>
           <div className="card">
             <h3>Minhas corridas</h3>
             {myRegistrations.length ? myRegistrations.map(reg => (
               <div className="ticket" key={reg.id}>
-                <div><span className="badge warning">{reg.status}</span><h3>{reg.eventTitle}</h3><p>{dateBR(reg.eventDate)} • {reg.distance} • {reg.shirt} • Nº {reg.id}</p><div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}><a className="btn btn-outline btn-small" href={`evento.html?evento=${reg.eventSlug}`}>Ver evento</a><button className="btn btn-dark btn-small" type="button" onClick={() => toast(`Comprovante da inscrição: ${reg.id}`)}>Comprovante</button></div></div>
+                <div><span className="badge warning">{reg.status}</span><h3>{reg.event_title}</h3><p>{dateBR(reg.event_date)} • {reg.route_name || `${reg.distance_km || 0}K`} • {reg.shirt_size || 'Sem camisa'} • Nº {reg.registration_number}</p>{reg.net_time_seconds != null && <p><strong>Resultado:</strong> {formatDuration(reg.net_time_seconds)} • posição geral {reg.overall_position || '-'}</p>}<div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}><a className="btn btn-outline btn-small" href={`evento.html?evento=${reg.event_slug}`}>Ver evento</a><button className="btn btn-dark btn-small" type="button" onClick={() => toast(`Comprovante da inscrição: ${reg.registration_number}`)}>Comprovante</button></div></div>
                 <div className="qr" title="QR Code demonstrativo"></div>
               </div>
             )) : <div className="empty">Você ainda não possui inscrições.</div>}
@@ -667,8 +858,9 @@ function OrganizerCreateSection({ organizer, organizerEvents, setOrganizerEvents
   const [mode, setMode] = useState('native');
   const [banner, setBanner] = useState(assetUrl('assets/bg-index.jpg'));
   const [distance, setDistance] = useState('');
+  const [saving, setSaving] = useState(false);
   const [estimate, setEstimate] = useState('Informe as coordenadas para gerar uma estimativa em linha reta. O percurso oficial pode ser ajustado manualmente.');
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const externalUrl = String(form.get('externalUrl') || '').trim();
@@ -676,28 +868,40 @@ function OrganizerCreateSection({ organizer, organizerEvents, setOrganizerEvents
       toast('Informe um link externo HTTP ou HTTPS valido.');
       return;
     }
-    const eventDraft = {
-      id: 'org-' + Date.now(),
-      name: form.get('eventName'),
-      date: form.get('eventDate'),
-      time: form.get('eventTime'),
-      city: form.get('eventCity'),
-      slots: form.get('eventSlots'),
-      banner,
-      registrationMode: form.get('registrationMode'),
-      externalUrl,
-      price: form.get('eventPrice'),
-      paymentMethods: form.getAll('paymentMethods'),
-      routeStart: form.get('routeStart'),
-      routeFinish: form.get('routeFinish'),
-      distanceKm: form.get('distanceKm'),
-      createdAt: new Date().toISOString()
-    };
-    const next = [eventDraft, ...organizerEvents];
-    setOrganizerEvents(next);
-    setJSON(ORGANIZER_EVENTS_KEY, next);
-    toast('Rascunho do evento salvo.');
-    e.currentTarget.reset();
+    const locationParts = String(form.get('eventCity') || '').split('/').map(value => value.trim());
+    const state = locationParts.length > 1 ? locationParts.pop().toUpperCase() : '';
+    const city = locationParts.join('/');
+    setSaving(true);
+    try {
+      const data = await apiRequest('/api/organizer/events', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: String(form.get('eventName') || '').trim(),
+          eventDate: form.get('eventDate'),
+          startTime: form.get('eventTime'),
+          city,
+          state,
+          slotsLimit: Number(form.get('eventSlots') || 0) || null,
+          bannerUrl: banner.startsWith('data:') ? null : banner,
+          registrationMode: form.get('registrationMode'),
+          externalUrl,
+          price: Number(form.get('eventPrice') || 0),
+          routeStart: form.get('routeStart'),
+          routeFinish: form.get('routeFinish'),
+          distanceKm: Number(form.get('distanceKm') || 0),
+          status: 'draft'
+        })
+      });
+      setOrganizerEvents(items => [normalizeOrganizerEvent(data.event), ...items]);
+      toast(data.message);
+      e.currentTarget.reset();
+      setDistance('');
+      setBanner(assetUrl('assets/bg-index.jpg'));
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      setSaving(false);
+    }
   };
   const readBanner = (e) => {
     const file = e.target.files?.[0];
@@ -759,7 +963,7 @@ function OrganizerCreateSection({ organizer, organizerEvents, setOrganizerEvents
             <div className="field"><label>Longitude da chegada</label><input className="input" id="finishLng" type="number" step="any" placeholder="-48.4900" /></div>
           </div>
           <div className="route-estimate">{estimate}</div>
-          <button className="btn btn-primary btn-block" type="submit">Salvar rascunho do evento</button>
+          <button className="btn btn-primary btn-block" type="submit" disabled={saving}>{saving ? 'Salvando...' : 'Salvar rascunho do evento'}</button>
         </form>
         <aside className="organizer-preview">
           <div className="card"><h3>Prévia do banner</h3><img src={banner} alt="Prévia do banner do evento" /><p>O banner aparecerá na página pública do evento e nos cards de divulgação.</p></div>
@@ -773,12 +977,14 @@ function OrganizerCreateSection({ organizer, organizerEvents, setOrganizerEvents
 function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerEvents, toast }) {
   const [authMode, setAuthMode] = useState('login');
   const [sending, setSending] = useState(false);
+  const [authNotice, setAuthNotice] = useState('');
   const submitLogin = async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const login = String(form.get('login') || '').trim();
     const password = String(form.get('password') || '');
     setSending(true);
+    setAuthNotice('');
     try {
       const data = await apiRequest('/api/auth/login', {
         method: 'POST',
@@ -788,6 +994,7 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
       toast(data.user.role === 'admin' ? 'Login do admin realizado.' : 'Login do organizador realizado.');
       setTimeout(() => { window.location.href = 'admin.html'; }, 450);
     } catch (error) {
+      if (error.code === 'email_unverified' || error.code === 'approval_pending') setAuthNotice(error.message);
       toast(error.message);
     } finally {
       setSending(false);
@@ -798,7 +1005,7 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
     const form = new FormData(e.currentTarget);
     setSending(true);
     try {
-      await apiRequest('/api/organizer-requests', {
+      const data = await apiRequest('/api/organizer-requests', {
         method: 'POST',
         body: JSON.stringify({
           company: String(form.get('company') || '').trim(),
@@ -807,9 +1014,9 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
           password: String(form.get('password') || '')
         })
       });
-      setAuthMode('login');
       e.currentTarget.reset();
-      toast('Pedido enviado. Aguarde aprovacao do admin.');
+      setAuthNotice(data.message);
+      toast('Cadastro recebido. Confirme seu e-mail.');
     } catch (error) {
       toast(error.message);
     } finally {
@@ -827,6 +1034,7 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
             <div className="organizer-login-card" id="organizerAccess">
               <img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" />
               <div className="organizer-auth-tabs"><button className={authMode === 'login' ? 'active' : ''} type="button" onClick={() => setAuthMode('login')}>Login</button><button className={authMode === 'signup' ? 'active' : ''} type="button" onClick={() => setAuthMode('signup')}>Cadastro</button></div>
+              {authNotice && <div className="auth-alert"><strong>Situação da conta</strong><p>{authNotice}</p></div>}
               {authMode === 'login' ? <form onSubmit={submitLogin}><h2>Login do organizador</h2><div className="field"><label>Login ou e-mail</label><input className="input" name="login" type="text" placeholder="Admin ou organizador@email.com" autoComplete="username" required /></div><div className="field"><label>Senha</label><input className="input" name="password" type="password" maxLength="128" placeholder="••••••••••••" autoComplete="current-password" required /></div><button className="btn btn-primary btn-block" type="submit" disabled={sending}>{sending ? 'Entrando...' : 'Entrar no painel'}</button></form> : <form onSubmit={submitSignup}><h2>Solicitar conta de organizador</h2><div className="field"><label>Nome da empresa</label><input className="input" name="company" maxLength="180" placeholder="Nome da organização" required /></div><div className="field"><label>Responsável</label><input className="input" name="name" maxLength="160" placeholder="Seu nome" required /></div><div className="field"><label>E-mail</label><input className="input" name="email" type="email" maxLength="254" placeholder="organizador@email.com" required /></div><div className="field"><label>Senha</label><input className="input" name="password" type="password" minLength="12" maxLength="128" placeholder="••••••••••••" autoComplete="new-password" required /></div><button className="btn btn-primary btn-block" type="submit" disabled={sending}>{sending ? 'Enviando...' : 'Enviar pedido'}</button></form>}
             </div>
           )}
@@ -837,14 +1045,11 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
   );
 }
 
-function AdminPage({ organizer, setOrganizer, registrations, organizerRequests, setOrganizerRequests, authLoading, toast }) {
+function AdminPage({ organizer, setOrganizer, organizerEvents, setOrganizerEvents, adminMetrics, adminRegistrations, adminFinance, organizerRequests, setOrganizerRequests, authLoading, toast }) {
   const page = currentPage();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const activeEvents = EVENTS.filter(event => new Date(event.date + 'T12:00:00') >= today).length;
-  const pastEvents = EVENTS.length - activeEvents;
-  const revenue = registrations.reduce((sum, reg) => sum + Number(reg.amount || 0), 0);
-  const totalRevenue = 142380 + revenue;
+  const activeEvents = Number(adminMetrics?.active_events || 0);
+  const pastEvents = Number(adminMetrics?.past_events || 0);
+  const totalRevenue = Number(adminMetrics?.total_revenue || 0);
   const adminPages = {
     'admin.html': ['dashboard', 'Dashboard', 'Visão geral de eventos, inscritos, receita e capacidade.'],
     'admin-eventos.html': ['eventos', 'Eventos', 'Gerencie eventos cadastrados e abra as páginas públicas.'],
@@ -872,12 +1077,9 @@ function AdminPage({ organizer, setOrganizer, registrations, organizerRequests, 
   }
   const isBaseAdmin = organizer.role === 'admin';
   const pendingRequests = organizerRequests.filter(item => item.status === 'pending');
-  const regs = registrations.length ? registrations : [{
-    id: 'CJ204891', name: organizer?.name || DEMO_USER.name, email: organizer?.email || DEMO_USER.email,
-    eventTitle: EVENTS[0].title, distance: '10K', shirt: 'G', amount: EVENTS[0].prices[0].price, status: 'Aguardando pagamento'
-  }];
+  const regs = adminRegistrations || [];
   const exportCSV = () => {
-    const rows = [['numero', 'atleta', 'email', 'evento', 'percurso', 'camisa', 'valor', 'status']].concat(regs.map(reg => [reg.id, reg.name, reg.email, reg.eventTitle, reg.distance, reg.shirt, reg.amount, reg.status]));
+    const rows = [['numero', 'atleta', 'email', 'evento', 'percurso', 'camisa', 'valor', 'status']].concat(regs.map(reg => [reg.registration_number, reg.athlete_name, reg.athlete_email, reg.event_title, reg.route_name, reg.shirt_size, reg.amount, reg.status]));
     const csv = rows.map(row => row.map(csvCell).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -912,11 +1114,31 @@ function AdminPage({ organizer, setOrganizer, registrations, organizerRequests, 
       toast(error.message);
     }
   };
+  const updateEventStatus = async (event, status) => {
+    try {
+      const data = await apiRequest(`/api/organizer/events/${event.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status })
+      });
+      setOrganizerEvents(items => items.map(item => item.id === event.id ? normalizeOrganizerEvent(data.event) : item));
+      toast(data.message);
+    } catch (error) {
+      toast(error.message);
+    }
+  };
   const content = {
-    dashboard: <><div className="admin-cards" id="dashboard"><div className="kpi"><span>Eventos ativos</span><strong>{activeEvents}</strong></div><div className="kpi"><span>Eventos passados</span><strong>{pastEvents}</strong></div><div className="kpi"><span>Rendimento total</span><strong>{money(totalRevenue)}</strong></div><div className="kpi"><span>Rendimento total</span><strong>{money(totalRevenue)}</strong></div></div><section className="card"><h3>Atalhos rápidos</h3><div className="stat-grid"><a className="stat" href="admin-eventos.html"><strong>Eventos</strong><span>ver calendário</span></a><a className="stat" href="admin-inscritos.html"><strong>Inscritos</strong><span>consultar atletas</span></a><a className="stat" href="admin-financeiro.html"><strong>Financeiro</strong><span>acompanhar valores</span></a></div></section></>,
-    eventos: <section className="card"><h3>Eventos</h3><div className="table-wrap"><table className="data-table"><thead><tr><th>Evento</th><th>Cidade</th><th>Data</th><th>Status</th><th>Ações</th></tr></thead><tbody>{EVENTS.map(event => <tr key={event.id}><td><strong>{event.title}</strong><br /><small>{event.category}</small></td><td>{event.city}/{event.state}</td><td>{dateBR(event.date)}</td><td><span className={`badge ${statusClass(event.status)}`}>{event.badge}</span></td><td><a className="btn btn-outline btn-small" href={`evento.html?evento=${event.slug}`}>Abrir</a></td></tr>)}</tbody></table></div></section>,
-    inscritos: <section className="card"><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><h3 style={{ margin: 0 }}>Inscritos recentes</h3><button className="btn btn-outline btn-small" type="button" onClick={exportCSV}>Exportar CSV</button></div><div className="table-wrap" style={{ marginTop: 12 }}><table className="data-table"><thead><tr><th>Número</th><th>Atleta</th><th>Evento</th><th>Percurso</th><th>Valor</th><th>Status</th></tr></thead><tbody>{regs.map(reg => <tr key={reg.id}><td>{reg.id}</td><td><strong>{reg.name}</strong><br /><small>{reg.email}</small></td><td>{reg.eventTitle}</td><td>{reg.distance}</td><td>{money(reg.amount)}</td><td><span className="badge warning">{reg.status}</span></td></tr>)}</tbody></table></div></section>,
-    financeiro: <><section className="card"><h3>Resumo financeiro</h3><div className="stat-grid"><div className="stat"><strong>{money(revenue)}</strong><span>valor em inscrições</span></div><div className="stat"><strong>{regs.length}</strong><span>pagamentos pendentes</span></div><div className="stat"><strong>{money(regs.length ? revenue / regs.length : 0)}</strong><span>ticket médio</span></div></div></section><section className="card"><h3>Pagamentos</h3><p style={{ color: 'var(--muted)', marginTop: 0 }}>Esta tela está preparada para receber dados reais do Mercado Pago, repasses e conciliação.</p></section></>,
+    dashboard: <>
+      <div className="admin-cards" id="dashboard">
+        <div className="kpi"><span>Eventos ativos</span><strong>{activeEvents}</strong></div>
+        <div className="kpi"><span>Eventos passados</span><strong>{pastEvents}</strong></div>
+        <div className="kpi"><span>Rendimento total</span><strong>{money(totalRevenue)}</strong></div>
+        <div className="kpi"><span>Inscrições</span><strong>{Number(adminMetrics?.registrations || 0)}</strong></div>
+      </div>
+      <section className="card"><h3>Atalhos rápidos</h3><div className="stat-grid"><a className="stat" href="admin-eventos.html"><strong>Eventos</strong><span>ver calendário</span></a><a className="stat" href="admin-inscritos.html"><strong>Inscritos</strong><span>consultar atletas</span></a><a className="stat" href="admin-financeiro.html"><strong>Financeiro</strong><span>acompanhar valores</span></a></div></section>
+    </>,
+    eventos: <section className="card"><h3>Eventos</h3>{organizerEvents.length ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Evento</th><th>Cidade</th><th>Data</th><th>Status</th><th>Ações</th></tr></thead><tbody>{organizerEvents.map(event => <tr key={event.id}><td><strong>{event.title}</strong><br /><small>{event.category || 'Corrida'}</small></td><td>{event.city}/{event.state}</td><td>{dateBR(event.event_date)}</td><td><span className={`badge ${statusClass(event.status)}`}>{event.status}</span></td><td><div className="table-actions"><button className="btn btn-outline btn-small" type="button" onClick={() => updateEventStatus(event, event.status === 'open' ? 'closed' : 'open')}>{event.status === 'open' ? 'Encerrar' : 'Publicar'}</button><button className="btn btn-dark btn-small" type="button" onClick={() => updateEventStatus(event, 'cancelled')}>Cancelar</button></div></td></tr>)}</tbody></table></div> : <div className="empty">Nenhum evento cadastrado para este organizador.</div>}</section>,
+    inscritos: <section className="card"><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><h3 style={{ margin: 0 }}>Inscritos recentes</h3><button className="btn btn-outline btn-small" type="button" onClick={exportCSV} disabled={!regs.length}>Exportar CSV</button></div>{regs.length ? <div className="table-wrap" style={{ marginTop: 12 }}><table className="data-table"><thead><tr><th>Número</th><th>Atleta</th><th>Evento</th><th>Percurso</th><th>Valor</th><th>Status</th></tr></thead><tbody>{regs.map(reg => <tr key={reg.id}><td>{reg.registration_number}</td><td><strong>{reg.athlete_name}</strong><br /><small>{reg.athlete_email}</small></td><td>{reg.event_title}</td><td>{reg.route_name || `${reg.distance_km || 0}K`}</td><td>{money(reg.amount)}</td><td><span className="badge warning">{reg.status}</span></td></tr>)}</tbody></table></div> : <div className="empty">Nenhuma inscrição encontrada.</div>}</section>,
+    financeiro: <><section className="card"><h3>Resumo financeiro</h3><div className="stat-grid"><div className="stat"><strong>{money(adminFinance?.paid_amount)}</strong><span>recebido</span></div><div className="stat"><strong>{money(adminFinance?.pending_amount)}</strong><span>pendente</span></div><div className="stat"><strong>{Number(adminFinance?.paid_count || 0)}</strong><span>inscrições pagas</span></div></div></section><section className="card"><h3>Pagamentos</h3><p style={{ color: 'var(--muted)', marginTop: 0 }}>{Number(adminFinance?.pending_count || 0)} pagamento(s) pendente(s) e {Number(adminFinance?.cancelled_count || 0)} cancelado(s) ou reembolsado(s).</p></section></>,
     config: <><section className="card"><h3>Configurações</h3><div className="form-grid"><div className="field"><label>Organizador</label><input className="input" value={organizer?.company || 'ChipBelém'} readOnly /></div><div className="field"><label>E-mail de contato</label><input className="input" value={organizer?.email || 'contato@chipbelem.com.br'} readOnly /></div><div className="field full"><label>Integração Mercado Pago</label><input className="input" value="Credencial secreta configurada somente no servidor" readOnly /></div></div></section>{isBaseAdmin ? <section className="card"><h3>Pedidos de organizador</h3><p className="admin-role-note">A conta base aprova quem pode acessar o painel como organizador.</p>{pendingRequests.length ? <div className="approval-list">{pendingRequests.map(request => <article className="approval-card" key={request.id}><div><strong>{request.company}</strong><span>{request.name} - {request.email}</span><small>Pedido enviado em {formatDateTime(request.created_at)}</small></div><button className="btn btn-primary btn-small" type="button" onClick={() => approveRequest(request.id)}>Aprovar</button></article>)}</div> : <div className="empty">Nenhum pedido pendente.</div>}</section> : <section className="card"><h3>Aprovação de organizadores</h3><p className="admin-role-note">Somente a conta base pode aprovar novos organizadores.</p></section>}</>
   };
   return (
@@ -941,20 +1163,68 @@ function Toast({ message }) {
 }
 
 export default function App() {
+  const [publicEvents, setPublicEvents] = useState(EVENTS);
   const [athlete, setAthlete] = useState(null);
   const [organizer, setOrganizer] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [registrations, setRegistrations] = useState([]);
-  const [organizerEvents, setOrganizerEvents] = useState(() => getJSON(ORGANIZER_EVENTS_KEY, []));
+  const [athleteDashboard, setAthleteDashboard] = useState({ registrations: [], stats: {} });
+  const [organizerEvents, setOrganizerEvents] = useState([]);
+  const [adminMetrics, setAdminMetrics] = useState({});
+  const [adminRegistrations, setAdminRegistrations] = useState([]);
+  const [adminFinance, setAdminFinance] = useState({});
   const [organizerRequests, setOrganizerRequests] = useState([]);
   const [toastMessage, setToastMessage] = useState('');
   const page = currentPage();
   useEffect(() => {
     let active = true;
+    apiRequest('/api/events').then((data) => {
+      if (!active) return;
+      const databaseEvents = (data.events || []).map(normalizePublicEvent);
+      const databaseSlugs = new Set(databaseEvents.map(event => event.slug));
+      setPublicEvents([...databaseEvents, ...EVENTS.filter(event => !databaseSlugs.has(event.slug))]);
+    }).catch(() => {
+      if (active) setPublicEvents(EVENTS);
+    });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    let active = true;
     apiRequest('/api/auth/session').then(async ({ user }) => {
       if (!active || !user) return;
-      if (user.role === 'athlete') setAthlete(user);
-      if (['organizer', 'admin'].includes(user.role)) setOrganizer(user);
+      if (user.role === 'athlete') {
+        setAthlete(user);
+        try {
+          const data = await apiRequest('/api/athlete/dashboard');
+          if (active) setAthleteDashboard(data);
+        } catch {
+          if (active) setAthleteDashboard({ registrations: [], stats: {} });
+        }
+      }
+      if (['organizer', 'admin'].includes(user.role)) {
+        setOrganizer(user);
+        try {
+          const [dashboardData, eventsData, registrationsData, financeData] = await Promise.all([
+            apiRequest('/api/organizer/dashboard'),
+            apiRequest('/api/organizer/events'),
+            apiRequest('/api/organizer/registrations'),
+            apiRequest('/api/organizer/finance')
+          ]);
+          if (active) {
+            setAdminMetrics(dashboardData.metrics || {});
+            setOrganizerEvents((eventsData.events || []).map(normalizeOrganizerEvent));
+            setAdminRegistrations(registrationsData.registrations || []);
+            setAdminFinance(financeData.finance || {});
+          }
+        } catch {
+          if (active) {
+            setAdminMetrics({});
+            setOrganizerEvents([]);
+            setAdminRegistrations([]);
+            setAdminFinance({});
+          }
+        }
+      }
       if (user.role === 'admin') {
         try {
           const data = await apiRequest('/api/organizer-requests');
@@ -973,6 +1243,15 @@ export default function App() {
     });
     return () => { active = false; };
   }, []);
+  useEffect(() => {
+    if (authLoading) return;
+    if (page === 'minhas-inscricoes.html' && !athlete) {
+      window.location.replace(organizer ? 'admin.html' : 'login.html?next=minhas-inscricoes.html');
+    }
+    if (page.startsWith('admin') && !organizer) {
+      window.location.replace(athlete ? 'minhas-inscricoes.html' : 'organizador.html#organizerAccess');
+    }
+  }, [page, athlete, organizer, authLoading]);
   const toast = (message) => {
     setToastMessage(message);
     setTimeout(() => setToastMessage(''), 2600);
@@ -987,18 +1266,18 @@ export default function App() {
     }
   };
   const pageContent = useMemo(() => {
-    if (page === 'index.html' || page === 'eventos.html') return <EventsPage />;
-    if (page === 'evento.html') return <EventDetailPage />;
-    if (page === 'inscricao.html') return <CheckoutPage athlete={athlete} registrations={registrations} setRegistrations={setRegistrations} toast={toast} />;
-    if (page === 'login.html') return <AuthPage type="login" athlete={athlete} setAthlete={setAthlete} toast={toast} />;
-    if (page === 'cadastro.html') return <AuthPage type="cadastro" athlete={athlete} setAthlete={setAthlete} toast={toast} />;
-    if (page === 'confirmar-email.html') return <ConfirmEmailPage setAthlete={setAthlete} />;
+    if (page === 'index.html' || page === 'eventos.html') return <EventsPage events={publicEvents} />;
+    if (page === 'evento.html') return <EventDetailPage events={publicEvents} />;
+    if (page === 'inscricao.html') return <CheckoutPage athlete={athlete} events={publicEvents} registrations={registrations} setRegistrations={setRegistrations} toast={toast} />;
+    if (page === 'login.html') return <AuthPage type="login" athlete={athlete} setAthlete={setAthlete} setOrganizer={setOrganizer} toast={toast} />;
+    if (page === 'cadastro.html') return <AuthPage type="cadastro" athlete={athlete} setAthlete={setAthlete} setOrganizer={setOrganizer} toast={toast} />;
+    if (page === 'confirmar-email.html') return <ConfirmEmailPage setAthlete={setAthlete} setOrganizer={setOrganizer} />;
     if (page === 'contato.html') return <ContactPage />;
-    if (page === 'minhas-inscricoes.html') return <AthleteArea athlete={athlete} registrations={registrations} setAthlete={setAthlete} toast={toast} />;
+    if (page === 'minhas-inscricoes.html') return <AthleteArea athlete={athlete} athleteDashboard={athleteDashboard} setAthlete={setAthlete} toast={toast} />;
     if (page === 'organizador.html') return <OrganizerPage organizer={organizer} setOrganizer={setOrganizer} organizerEvents={organizerEvents} setOrganizerEvents={setOrganizerEvents} toast={toast} />;
-    if (page.startsWith('admin')) return <AdminPage organizer={organizer} setOrganizer={setOrganizer} registrations={registrations} organizerRequests={organizerRequests} setOrganizerRequests={setOrganizerRequests} authLoading={authLoading} toast={toast} />;
-    return <EventsPage />;
-  }, [page, athlete, organizer, authLoading, registrations, organizerEvents, organizerRequests]);
+    if (page.startsWith('admin')) return <AdminPage organizer={organizer} setOrganizer={setOrganizer} organizerEvents={organizerEvents} setOrganizerEvents={setOrganizerEvents} adminMetrics={adminMetrics} adminRegistrations={adminRegistrations} adminFinance={adminFinance} organizerRequests={organizerRequests} setOrganizerRequests={setOrganizerRequests} authLoading={authLoading} toast={toast} />;
+    return <EventsPage events={publicEvents} />;
+  }, [page, publicEvents, athlete, organizer, authLoading, registrations, athleteDashboard, organizerEvents, adminMetrics, adminRegistrations, adminFinance, organizerRequests]);
 
   return (
     <Layout athlete={athlete} organizer={organizer} onAthleteLogout={logoutAthlete}>

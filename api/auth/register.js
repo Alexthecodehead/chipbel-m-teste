@@ -1,46 +1,41 @@
 import { createVerificationToken, hashPassword, normalizeEmail, validEmail, validatePassword } from '../../server/auth.js';
+import { confirmationUrl } from '../../server/app-url.js';
 import { transaction } from '../../server/db.js';
 import { sendConfirmationEmail } from '../../server/email.js';
 import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../server/http.js';
 import { enforceRateLimit } from '../../server/rate-limit.js';
 
-function appUrl(request) {
-  const configured = String(process.env.APP_URL || '').trim();
-  if (configured) {
-    const value = new URL(configured);
-    if (process.env.NODE_ENV === 'production' && value.protocol !== 'https:') {
-      throw new Error('APP_URL deve usar HTTPS em producao.');
-    }
-    return value;
-  }
-  if (process.env.NODE_ENV === 'production') throw new Error('APP_URL nao configurada.');
-  const host = request.headers.host || '127.0.0.1:5173';
-  return new URL(`http://${host}`);
-}
+const ROLES = new Set(['athlete', 'organizer']);
 
 export default async function handler(request, response) {
   try {
     method(request, ['POST']);
     assertSameOrigin(request);
     const data = body(request);
+    const role = ROLES.has(data.role) ? data.role : 'athlete';
     const name = String(data.name || '').trim().slice(0, 160);
     const email = normalizeEmail(data.email);
     const phone = String(data.phone || '').trim().slice(0, 30);
     const city = String(data.city || '').trim().slice(0, 120);
+    const company = String(data.company || '').trim().slice(0, 180);
     const password = validatePassword(data.password);
 
-    if (name.length < 3 || !validEmail(email)) {
-      throw new HttpError(400, 'Nome ou e-mail invalido.', 'invalid_input');
+    if (name.length < 3 || !validEmail(email) || (role === 'organizer' && company.length < 2)) {
+      throw new HttpError(400, 'Revise os dados informados.', 'invalid_input');
     }
-    await enforceRateLimit(request, 'athlete_register_ip', 'all', { limit: 10, windowSeconds: 60 * 60, blockSeconds: 60 * 60 });
-    await enforceRateLimit(request, 'athlete_register', email, { limit: 3, windowSeconds: 60 * 60, blockSeconds: 60 * 60 });
+
+    await enforceRateLimit(request, 'register_ip', 'all', { limit: 10, windowSeconds: 60 * 60, blockSeconds: 60 * 60 });
+    await enforceRateLimit(request, `register_${role}`, email, { limit: 3, windowSeconds: 60 * 60, blockSeconds: 60 * 60 });
 
     const passwordHash = await hashPassword(password);
     const verification = createVerificationToken();
     const user = await transaction(async (client) => {
-      const existingResult = await client.query('SELECT id, role, is_active FROM users WHERE email = $1 FOR UPDATE', [email]);
+      const existingResult = await client.query(
+        'SELECT id, role, is_active, account_status FROM users WHERE email = $1 FOR UPDATE',
+        [email]
+      );
       const existing = existingResult.rows[0];
-      if (existing?.is_active || (existing && existing.role !== 'athlete')) {
+      if (existing?.is_active || (existing && existing.role !== role)) {
         throw new HttpError(409, 'Este e-mail ja possui uma conta.', 'account_exists');
       }
 
@@ -49,18 +44,54 @@ export default async function handler(request, response) {
         userId = existing.id;
         await client.query(
           `UPDATE users
-              SET name = $2, password_hash = $3, phone = $4, city = $5, updated_at = NOW()
+              SET name = $2, password_hash = $3, phone = $4, city = $5,
+                  account_status = CASE WHEN role = 'organizer' THEN 'pending' ELSE 'approved' END,
+                  updated_at = NOW()
             WHERE id = $1`,
           [userId, name, passwordHash, phone || null, city || null]
         );
       } else {
         const inserted = await client.query(
-          `INSERT INTO users (name, email, password_hash, role, phone, city, is_active)
-           VALUES ($1, $2, $3, 'athlete', $4, $5, FALSE)
+          `INSERT INTO users (name, email, password_hash, role, account_status, phone, city, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE)
            RETURNING id`,
-          [name, email, passwordHash, phone || null, city || null]
+          [name, email, passwordHash, role, role === 'organizer' ? 'pending' : 'approved', phone || null, city || null]
         );
         userId = inserted.rows[0].id;
+      }
+
+      if (role === 'organizer') {
+        await client.query(
+          `INSERT INTO organizer_profiles (user_id, company_name, contact_name, contact_email, contact_phone)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (user_id) DO UPDATE
+             SET company_name = EXCLUDED.company_name,
+                 contact_name = EXCLUDED.contact_name,
+                 contact_email = EXCLUDED.contact_email,
+                 contact_phone = EXCLUDED.contact_phone,
+                 updated_at = NOW()`,
+          [userId, company, name, email, phone || null]
+        );
+
+        const pendingRequest = await client.query(
+          'SELECT id FROM organizer_requests WHERE user_id = $1 FOR UPDATE',
+          [userId]
+        );
+        if (pendingRequest.rows[0]) {
+          await client.query(
+            `UPDATE organizer_requests
+                SET company_name = $2, contact_name = $3, contact_email = $4,
+                    status = 'pending', reviewed_at = NULL, approved_by = NULL, updated_at = NOW()
+              WHERE user_id = $1`,
+            [userId, company, name, email]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO organizer_requests (user_id, company_name, contact_name, contact_email)
+             VALUES ($1, $2, $3, $4)`,
+            [userId, company, name, email]
+          );
+        }
       }
 
       await client.query('DELETE FROM email_verification_tokens WHERE user_id = $1', [userId]);
@@ -69,14 +100,27 @@ export default async function handler(request, response) {
          VALUES ($1, $2, NOW() + INTERVAL '24 hours')`,
         [userId, verification.hash]
       );
-      return { id: userId, name, email };
+      return { id: userId, name, email, role };
     });
 
-    const confirmationUrl = new URL('confirmar-email.html', appUrl(request));
-    confirmationUrl.searchParams.set('token', verification.token);
-    await sendConfirmationEmail({ name: user.name, email: user.email, confirmationUrl: confirmationUrl.href });
+    try {
+      await sendConfirmationEmail({
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        confirmationUrl: confirmationUrl(request, verification.token)
+      });
+    } catch {
+      throw new HttpError(502, 'Conta criada, mas o e-mail nao foi entregue. Use a opcao de reenviar confirmacao.', 'email_delivery_failed');
+    }
 
-    json(response, 201, { ok: true, message: 'Confira seu e-mail para ativar a conta.' });
+    json(response, 201, {
+      ok: true,
+      role,
+      message: role === 'organizer'
+        ? 'Confirme seu e-mail. Depois, o pedido sera analisado pela equipe.'
+        : 'Confira seu e-mail para ativar a conta.'
+    });
   } catch (error) {
     handleError(response, error);
   }

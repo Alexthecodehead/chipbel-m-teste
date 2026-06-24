@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "create-admin": "node scripts/create-admin.mjs",
-    "test:security": "node scripts/security-self-test.mjs"
+    "test:security": "node scripts/security-self-test.mjs",
+    "test:syntax": "node scripts/check-source.mjs"
   },
   "dependencies": {
     "pg": "^8.22.0",

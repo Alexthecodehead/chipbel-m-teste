@@ -7,6 +7,8 @@
 - Confirmacao de e-mail: token aleatorio; somente o hash fica no banco; validade de 24 horas.
 - CPF: o schema reserva `cpf_hash`, `cpf_encrypted` e `cpf_last4`. A API de inscricoes deve criptografar o CPF antes de persistir.
 - Mercado Pago: `MERCADO_PAGO_ACCESS_TOKEN` nunca deve entrar no React ou no `localStorage`.
+- Perfil e estado de aprovacao ficam no PostgreSQL, nunca no `localStorage`.
+- Eventos, inscritos e financeiro sao filtrados pelo organizador derivado da sessao.
 
 ## Operacao
 
@@ -20,8 +22,9 @@
 
 ## Limitacoes atuais
 
-- Eventos e inscricoes ainda nao possuem APIs completas de persistencia. A interface usa dados demonstrativos em memoria.
-- Rascunhos de eventos ficam no `localStorage`, sem segredos. Eles nao devem ser tratados como registros oficiais.
+- Os eventos antigos em `src/data.js` continuam demonstrativos. Eventos criados no painel sao persistidos no PostgreSQL.
+- Upload permanente de banner ainda precisa de storage gerenciado; a imagem local selecionada serve como previa.
+- O checkout cria a inscricao no banco, mas a cobranca e o webhook do Mercado Pago ainda precisam ser finalizados.
 - Aprovacao de organizadores deve incluir verificacao humana da empresa enquanto nao houver validacao documental.
 - Recuperacao de senha ainda precisa de fluxo por token de uso unico.
 - Para protecao adicional contra ataques distribuidos, configure WAF/rate limiting na Vercel alem do limite no PostgreSQL.

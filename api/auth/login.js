@@ -23,7 +23,7 @@ export default async function handler(request, response) {
 
     const result = await query(
       `SELECT u.id, u.name, u.email, u.password_hash, u.role, u.phone, u.city,
-              u.is_active, u.email_verified_at, op.company_name
+              u.is_active, u.email_verified_at, u.account_status, op.company_name
          FROM users u
          LEFT JOIN organizer_profiles op ON op.user_id = u.id
         WHERE u.email = $1 OR LOWER(COALESCE(u.username, '')) = LOWER($2)
@@ -39,8 +39,14 @@ export default async function handler(request, response) {
     if (!user || !matches || !allowedRole) {
       throw new HttpError(401, 'Login ou senha invalidos.', 'invalid_credentials');
     }
-    if (!user.is_active) {
-      throw new HttpError(403, 'Confirme seu e-mail antes de entrar.', 'account_inactive');
+    if (!user.email_verified_at) {
+      throw new HttpError(403, 'Confirme seu e-mail antes de entrar.', 'email_unverified');
+    }
+    if (user.role === 'organizer' && user.account_status === 'pending') {
+      throw new HttpError(403, 'Seu cadastro de organizador esta aguardando aprovacao.', 'approval_pending');
+    }
+    if (!user.is_active || user.account_status !== 'approved') {
+      throw new HttpError(403, 'Esta conta nao esta liberada para acesso.', 'account_disabled');
     }
 
     await clearRateLimit(request, 'login', login);

@@ -6,12 +6,12 @@ Plataforma React/Vite para eventos esportivos, inscricoes, area do atleta, organ
 
 - React + Vite no frontend
 - Funcoes serverless em `api/`
-- PostgreSQL para usuarios, aprovacoes e tokens
+- PostgreSQL para usuarios, perfis, aprovacoes, eventos, inscricoes e resultados
 - Senhas com scrypt nativo do Node e salt aleatorio
 - Sessao assinada em cookie `HttpOnly`, `Secure` e `SameSite=Strict`
 - Resend para confirmacao de e-mail
 
-Rascunhos demonstrativos de eventos continuam no `localStorage`, mas nao contem senhas, sessoes, CPF ou tokens de pagamento. Dados pessoais e operacoes financeiras devem ser persistidos somente pela API/PostgreSQL.
+Os eventos antigos de `src/data.js` continuam como catalogo demonstrativo. Novos eventos, inscricoes, perfis e operacoes administrativas usam API e PostgreSQL.
 
 ## Configuracao local
 
@@ -29,6 +29,7 @@ SESSION_SECRET=uma-chave-aleatoria-com-no-minimo-32-caracteres
 APP_URL=http://127.0.0.1:3000/
 ADMIN_LOGIN=Admin
 ADMIN_EMAIL=seu-email@dominio.com
+ADMIN_COMPANY=ChipBelem
 RESEND_API_KEY=re_...
 MAIL_FROM=ChipBelem <contato@seudominio.com>
 ```
@@ -38,6 +39,8 @@ MAIL_FROM=ChipBelem <contato@seudominio.com>
 ```powershell
 & "C:\Program Files\PostgreSQL\16\bin\psql.exe" "$env:DATABASE_URL" -f database/schema.sql
 ```
+
+Para um banco ja existente, aplique tambem `database/migrations/002_user_roles_and_results.sql`.
 
 4. Crie ou atualize o administrador sem gravar a senha no codigo:
 
@@ -71,6 +74,7 @@ Configure em `Project > Settings > Environment Variables`:
 - `APP_URL` (URL HTTPS final do projeto)
 - `ADMIN_LOGIN`
 - `ADMIN_EMAIL`
+- `ADMIN_COMPANY`
 - `RESEND_API_KEY`
 - `MAIL_FROM`
 - `MERCADO_PAGO_ACCESS_TOKEN` quando a integracao estiver pronta
@@ -97,3 +101,4 @@ GitHub Pages publica somente arquivos estaticos. Ele pode exibir a interface, ma
 - Access Token do Mercado Pago aceito apenas no servidor
 
 Consulte [docs/security.md](docs/security.md) para riscos restantes e operacao segura.
+Consulte [docs/authentication-and-roles.md](docs/authentication-and-roles.md) para configuracao, perfis e roteiro de testes.

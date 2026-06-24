@@ -39,6 +39,8 @@ export function publicUser(user) {
     name: user.name,
     email: user.email,
     role: user.role,
+    accountStatus: user.account_status || 'approved',
+    emailVerified: Boolean(user.email_verified_at),
     phone: user.phone || '',
     city: user.city || '',
     company: user.company_name || ''
@@ -162,6 +164,7 @@ export async function requireSession(request, roles = []) {
 
   const result = await query(
     `SELECT u.id, u.name, u.email, u.role, u.phone, u.city, u.is_active,
+            u.account_status, u.email_verified_at,
             op.company_name
        FROM users u
        LEFT JOIN organizer_profiles op ON op.user_id = u.id
@@ -169,7 +172,7 @@ export async function requireSession(request, roles = []) {
     [session.sub]
   );
   const user = result.rows[0];
-  if (!user?.is_active || user.role !== session.role) {
+  if (!user?.is_active || user.account_status !== 'approved' || user.role !== session.role) {
     throw new HttpError(401, 'Sessao invalida ou expirada.', 'unauthorized');
   }
   if (roles.length && !roles.includes(user.role)) {

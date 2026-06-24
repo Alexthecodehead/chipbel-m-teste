@@ -28,10 +28,11 @@ Depois de alterar variaveis, faca um novo deploy.
 ## Fluxo
 
 1. O usuario envia nome, e-mail e senha para `/api/auth/register`.
-2. A senha e transformada em hash bcrypt.
+2. A senha e transformada com scrypt, salt aleatorio e parametros fortes.
 3. Um token aleatorio e criado; somente seu hash e salvo por 24 horas.
 4. O Resend recebe a URL criada a partir de `APP_URL`.
 5. `confirmar-email.html` envia o token para `/api/auth/confirm`.
-6. O backend consome o token, ativa a conta e cria a sessao segura.
+6. O backend consome o token. Atletas sao ativados imediatamente; organizadores ainda dependem da aprovacao administrativa.
+7. Um link novo pode ser solicitado por `/api/auth/resend`, com limite de tentativas.
 
 O antigo endpoint `/api/send-confirmation` foi removido para impedir abuso da conta Resend e links de phishing controlados pelo cliente.
