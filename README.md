@@ -5,13 +5,34 @@ Plataforma React/Vite para eventos esportivos, inscricoes, area do atleta, organ
 ## Arquitetura
 
 - React + Vite no frontend
-- Funcoes serverless em `api/`
+- Uma funcao serverless catch-all em `api/[...route].js`
+- Handlers internos em `server/routes/`
 - PostgreSQL para usuarios, perfis, aprovacoes, eventos, inscricoes e resultados
 - Senhas com scrypt nativo do Node e salt aleatorio
 - Sessao assinada em cookie `HttpOnly`, `Secure` e `SameSite=Strict`
 - Resend para confirmacao de e-mail
 
 Os eventos antigos de `src/data.js` continuam como catalogo demonstrativo. Novos eventos, inscricoes, perfis e operacoes administrativas usam API e PostgreSQL.
+
+## API na Vercel Hobby
+
+O plano Hobby da Vercel limita a quantidade de Serverless Functions por deploy. Por isso, as URLs publicas continuam as mesmas, mas todas passam por uma unica funcao:
+
+```text
+api/[...route].js
+```
+
+Exemplos que continuam funcionando:
+
+```text
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/confirm
+GET  /api/auth/session
+GET  /api/health
+```
+
+Os handlers reais ficam em `server/routes/`. Nao adicione novos arquivos `.js` dentro de `api/`, senao a Vercel volta a contar mais funcoes serverless.
 
 ## Configuracao local
 

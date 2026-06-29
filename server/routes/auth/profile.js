@@ -1,6 +1,6 @@
-import { publicUser, requireSession, verifyPassword } from '../../server/auth.js';
-import { query } from '../../server/db.js';
-import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../server/http.js';
+import { publicUser, requireSession, verifyPassword } from '../../auth.js';
+import { query } from '../../db.js';
+import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../http.js';
 
 export default async function handler(request, response) {
   try {

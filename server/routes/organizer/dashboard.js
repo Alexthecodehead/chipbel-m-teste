@@ -1,6 +1,6 @@
-import { requireOrganizer, ownedOrganizerId } from '../../server/authorization.js';
-import { query } from '../../server/db.js';
-import { handleError, json, method } from '../../server/http.js';
+import { requireOrganizer, ownedOrganizerId } from '../../authorization.js';
+import { query } from '../../db.js';
+import { handleError, json, method } from '../../http.js';
 
 export default async function handler(request, response) {
   try {

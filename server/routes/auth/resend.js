@@ -1,10 +1,10 @@
-import { createVerificationToken, normalizeEmail, validEmail } from '../../server/auth.js';
-import { confirmationUrl } from '../../server/app-url.js';
-import { transaction } from '../../server/db.js';
-import { sendConfirmationEmail, toEmailHttpError } from '../../server/email.js';
-import { authTestMode, logApiDiagnostic } from '../../server/diagnostics.js';
-import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../server/http.js';
-import { enforceRateLimit } from '../../server/rate-limit.js';
+import { createVerificationToken, normalizeEmail, validEmail } from '../../auth.js';
+import { confirmationUrl } from '../../app-url.js';
+import { transaction } from '../../db.js';
+import { sendConfirmationEmail, toEmailHttpError } from '../../email.js';
+import { authTestMode, logApiDiagnostic } from '../../diagnostics.js';
+import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../http.js';
+import { enforceRateLimit } from '../../rate-limit.js';
 
 export default async function handler(request, response) {
   try {

@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
-import { safeDiagnostics } from '../../server/diagnostics.js';
-import { handleError, HttpError, json, method } from '../../server/http.js';
+import { safeDiagnostics } from '../../diagnostics.js';
+import { handleError, HttpError, json, method } from '../../http.js';
 
 function sameSecret(received, expected) {
   const left = Buffer.from(String(received || ''));

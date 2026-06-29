@@ -1,9 +1,9 @@
-import { createVerificationToken, publicUser, requireSession } from '../../server/auth.js';
-import { appUrl, confirmationUrl } from '../../server/app-url.js';
-import { transaction } from '../../server/db.js';
-import { sendConfirmationEmail, sendOrganizerApprovalEmail, toEmailHttpError } from '../../server/email.js';
-import { logApiDiagnostic } from '../../server/diagnostics.js';
-import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../server/http.js';
+import { createVerificationToken, publicUser, requireSession } from '../../auth.js';
+import { appUrl, confirmationUrl } from '../../app-url.js';
+import { transaction } from '../../db.js';
+import { sendConfirmationEmail, sendOrganizerApprovalEmail, toEmailHttpError } from '../../email.js';
+import { logApiDiagnostic } from '../../diagnostics.js';
+import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../http.js';
 
 export default async function handler(request, response) {
   try {

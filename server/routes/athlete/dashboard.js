@@ -1,6 +1,6 @@
-import { requireSession } from '../../server/auth.js';
-import { query } from '../../server/db.js';
-import { handleError, json, method } from '../../server/http.js';
+import { requireSession } from '../../auth.js';
+import { query } from '../../db.js';
+import { handleError, json, method } from '../../http.js';
 
 export default async function handler(request, response) {
   try {

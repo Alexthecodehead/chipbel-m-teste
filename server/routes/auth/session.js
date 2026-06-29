@@ -1,6 +1,6 @@
-import { publicUser, requireSession } from '../../server/auth.js';
-import { logApiDiagnostic } from '../../server/diagnostics.js';
-import { handleError, json, method } from '../../server/http.js';
+import { publicUser, requireSession } from '../../auth.js';
+import { logApiDiagnostic } from '../../diagnostics.js';
+import { handleError, json, method } from '../../http.js';
 
 export default async function handler(request, response) {
   try {

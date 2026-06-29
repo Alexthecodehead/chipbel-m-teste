@@ -1,7 +1,7 @@
-import { requireSession } from '../server/auth.js';
-import { query } from '../server/db.js';
-import { logApiDiagnostic } from '../server/diagnostics.js';
-import { assertSameOrigin, body, handleError, json } from '../server/http.js';
+import { requireSession } from '../auth.js';
+import { query } from '../db.js';
+import { logApiDiagnostic } from '../diagnostics.js';
+import { assertSameOrigin, body, handleError, json } from '../http.js';
 import registerHandler from './auth/register.js';
 
 export default async function handler(request, response) {

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import { requireSession } from '../server/auth.js';
-import { transaction } from '../server/db.js';
-import { assertSameOrigin, body, handleError, HttpError, json, method } from '../server/http.js';
+import { requireSession } from '../auth.js';
+import { transaction } from '../db.js';
+import { assertSameOrigin, body, handleError, HttpError, json, method } from '../http.js';
 
 export default async function handler(request, response) {
   try {

@@ -1,7 +1,7 @@
-import { hashVerificationToken, publicUser, setSessionCookie } from '../../server/auth.js';
-import { transaction } from '../../server/db.js';
-import { logApiDiagnostic } from '../../server/diagnostics.js';
-import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../server/http.js';
+import { hashVerificationToken, publicUser, setSessionCookie } from '../../auth.js';
+import { transaction } from '../../db.js';
+import { logApiDiagnostic } from '../../diagnostics.js';
+import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../http.js';
 
 export default async function handler(request, response) {
   try {

@@ -1,6 +1,6 @@
-import { requireOrganizer, ownedOrganizerId } from '../../../server/authorization.js';
-import { query } from '../../../server/db.js';
-import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../../server/http.js';
+import { requireOrganizer, ownedOrganizerId } from '../../../authorization.js';
+import { query } from '../../../db.js';
+import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../../http.js';
 
 const text = (value, length) => String(value || '').trim().slice(0, length);
 

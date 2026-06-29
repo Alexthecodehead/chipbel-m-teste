@@ -1,5 +1,5 @@
-import { clearSessionCookie } from '../../server/auth.js';
-import { assertSameOrigin, handleError, json, method } from '../../server/http.js';
+import { clearSessionCookie } from '../../auth.js';
+import { assertSameOrigin, handleError, json, method } from '../../http.js';
 
 export default async function handler(request, response) {
   try {

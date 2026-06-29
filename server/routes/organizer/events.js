@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import { requireOrganizer, ownedOrganizerId } from '../../server/authorization.js';
-import { transaction, query } from '../../server/db.js';
-import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../server/http.js';
+import { requireOrganizer, ownedOrganizerId } from '../../authorization.js';
+import { transaction, query } from '../../db.js';
+import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../http.js';
 
 const text = (value, length) => String(value || '').trim().slice(0, length);
 const slugify = (value) => text(value, 160).normalize('NFD').replace(/[\u0300-\u036f]/g, '')

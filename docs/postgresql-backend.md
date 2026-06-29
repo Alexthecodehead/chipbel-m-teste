@@ -54,6 +54,9 @@ SELECT * FROM events;
 
 ## APIs implementadas
 
+Todas as URLs abaixo passam por `api/[...route].js`, a unica Serverless Function publica. Os handlers internos ficam em `server/routes/`.
+
+- `GET /api/health`
 - `POST /api/auth/login`
 - `POST /api/auth/register`
 - `POST /api/auth/confirm`
@@ -62,18 +65,18 @@ SELECT * FROM events;
 - `POST /api/auth/profile`
 - `GET|POST /api/organizer-requests`
 - `POST /api/organizer-requests/approve`
+- `POST /registrations`
+- `GET /api/events`
+- `GET|POST /api/organizer/events`
+- `PATCH|DELETE /api/organizer/events/:id`
+- `GET /api/organizer/dashboard`
+- `GET /api/organizer/registrations`
+- `GET /api/organizer/finance`
+- `GET /api/athlete/dashboard`
 
 ## Proximas APIs
 
-- `GET /events`
-- `GET /events/:slug`
-- `POST /organizer/events`
-- `GET /admin/dashboard`
-- `GET /admin/events`
-- `GET /admin/registrations`
-- `GET /admin/finance`
-- `POST /registrations`
-- `POST /payments/mercado-pago/webhook`
+- `POST /api/payments/mercado-pago/webhook`
 
 ## Observações de segurança
 
