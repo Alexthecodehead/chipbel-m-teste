@@ -1,10 +1,12 @@
 import { requireSession } from '../server/auth.js';
 import { query } from '../server/db.js';
-import { body, handleError, json } from '../server/http.js';
+import { logApiDiagnostic } from '../server/diagnostics.js';
+import { assertSameOrigin, body, handleError, json } from '../server/http.js';
 import registerHandler from './auth/register.js';
 
 export default async function handler(request, response) {
   try {
+    logApiDiagnostic('/api/organizer-requests', { method: request.method });
     if (request.method === 'GET') {
       await requireSession(request, ['admin']);
       const result = await query(
@@ -20,6 +22,7 @@ export default async function handler(request, response) {
       return;
     }
 
+    assertSameOrigin(request);
     const data = body(request);
     request.body = { ...data, role: 'organizer', company: data.company };
     return registerHandler(request, response);

@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { HttpError } from './http.js';
 
 const { Pool } = pg;
 
@@ -6,7 +7,7 @@ let pool;
 
 export function getPool() {
   if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL nao configurada.');
+    throw new HttpError(500, 'DATABASE_URL nao configurada no ambiente da Vercel.', 'database_url_missing');
   }
 
   if (!pool) {

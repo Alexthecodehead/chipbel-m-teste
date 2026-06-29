@@ -15,15 +15,46 @@ Configure em Production e Preview quando necessario:
 
 ```text
 RESEND_API_KEY=re_xxxxxxxxx
-MAIL_FROM=ChipBelem <contato@seudominio.com>
-APP_URL=https://seu-projeto.vercel.app/
+MAIL_FROM=ChipBelem <no-reply@dominio-verificado.com>
+APP_URL=https://chipbel-m-teste.vercel.app/
 DATABASE_URL=postgresql://...
 SESSION_SECRET=chave-aleatoria-com-no-minimo-32-caracteres
+AUTH_TEST_MODE=false
 ```
 
 `MAIL_FROM` precisa usar o dominio verificado. `APP_URL` precisa ser HTTPS em producao.
+Nao configure `APP_URL` com uma URL do GitHub Pages, porque GitHub Pages nao executa `/api/auth/confirm`.
+Tambem nao use URLs de deployment especifico da Vercel, como `chipbel-m-teste-xxxxx-alexandre-the-codehead.vercel.app`, porque os e-mails devem apontar para `https://chipbel-m-teste.vercel.app/`.
 
 Depois de alterar variaveis, faca um novo deploy.
+
+## Erros comuns
+
+- `RESEND_API_KEY nao configurada`: crie a variavel em Production na Vercel e faca redeploy.
+- `MAIL_FROM nao configurado`: crie a variavel usando o formato `ChipBelem <contato@seudominio.com>`.
+- `MAIL_FROM invalido`: revise o e-mail do remetente e use um dominio real.
+- Erro 403 do Resend: normalmente o dominio do `MAIL_FROM` nao esta verificado ou o remetente `resend.dev` esta tentando enviar para usuarios que nao sao o e-mail dono da conta.
+- `MAIL_FROM nao pode usar resend.dev em producao`: configure um remetente do dominio verificado no Resend.
+
+## Teste sem dominio proprio
+
+Se voce ainda nao tem dominio verificado, configure temporariamente:
+
+```text
+AUTH_TEST_MODE=true
+MAIL_FROM=ChipBelem <onboarding@resend.dev>
+```
+
+Com isso, o backend ainda cria usuario e token com seguranca, tenta enviar pelo Resend se possivel, mas retorna `devConfirmationUrl` no JSON quando o envio nao puder ser entregue. Abra esse link para validar a conta durante testes.
+
+Desative antes de usar com usuarios reais:
+
+```text
+AUTH_TEST_MODE=false
+MAIL_FROM=ChipBelem <no-reply@dominio-verificado.com>
+```
+- `APP_URL deve usar HTTPS`: em Production, use `https://...`.
+- `APP_URL deve apontar para a Vercel ou dominio proprio`: troque URLs `github.io` pela URL real da Vercel/dominio proprio.
 
 ## Fluxo
 

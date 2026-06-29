@@ -1,10 +1,12 @@
 import { hashVerificationToken, publicUser, setSessionCookie } from '../../server/auth.js';
 import { transaction } from '../../server/db.js';
+import { logApiDiagnostic } from '../../server/diagnostics.js';
 import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../server/http.js';
 
 export default async function handler(request, response) {
   try {
     method(request, ['POST']);
+    logApiDiagnostic('/api/auth/confirm', { method: request.method });
     assertSameOrigin(request);
     const token = String(body(request).token || '');
     if (!/^[A-Za-z0-9_-]{40,80}$/.test(token)) {

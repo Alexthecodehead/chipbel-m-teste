@@ -1,12 +1,14 @@
 import { createVerificationToken, publicUser, requireSession } from '../../server/auth.js';
 import { appUrl, confirmationUrl } from '../../server/app-url.js';
 import { transaction } from '../../server/db.js';
-import { sendConfirmationEmail, sendOrganizerApprovalEmail } from '../../server/email.js';
+import { sendConfirmationEmail, sendOrganizerApprovalEmail, toEmailHttpError } from '../../server/email.js';
+import { logApiDiagnostic } from '../../server/diagnostics.js';
 import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../server/http.js';
 
 export default async function handler(request, response) {
   try {
     method(request, ['POST']);
+    logApiDiagnostic('/api/organizer-requests/approve', { method: request.method });
     assertSameOrigin(request);
     const admin = await requireSession(request, ['admin']);
     const requestId = Number(body(request).requestId);
@@ -99,7 +101,10 @@ export default async function handler(request, response) {
           confirmationUrl: confirmationUrl(request, verification.token)
         });
       }
-    } catch {
+    } catch (error) {
+      console.error('ChipBelem organizer approval email warning', {
+        code: toEmailHttpError(error).code
+      });
       emailWarning = true;
     }
 

@@ -79,6 +79,36 @@ button { cursor: pointer; }
 .nav-account-link:hover { background: rgba(255,255,255,.12); }
 .nav-logout { color:#86efac; }
 
+.backend-mode-notice {
+  width: min(1180px, calc(100% - 32px));
+  margin: 14px auto 0;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #7c2d12;
+  font-size: 13px;
+  box-shadow: var(--shadow-soft);
+}
+.backend-mode-notice strong { font-weight: 900; }
+.backend-mode-notice span { color: #9a3412; font-weight: 700; }
+.backend-mode-notice a {
+  margin-left: auto;
+  color: #14532d;
+  font-weight: 900;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.backend-mode-notice.compact {
+  width: 100%;
+  margin: 0 0 18px;
+  box-shadow: none;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -627,7 +657,7 @@ button { cursor: pointer; }
   color:#14532d;
 }
 .auth-alert strong, .auth-alert a { display:block; }
-.auth-alert p { color:#166534; margin:4px 0 0; }
+.auth-alert p { color:#166534; margin:4px 0 0; overflow-wrap:anywhere; }
 .auth-alert a { margin-top:8px; color:#15803d; font-weight:800; word-break:break-all; }
 .auth-resend {
   width:100%;

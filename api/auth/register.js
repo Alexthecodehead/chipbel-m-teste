@@ -1,7 +1,8 @@
 import { createVerificationToken, hashPassword, normalizeEmail, validEmail, validatePassword } from '../../server/auth.js';
 import { confirmationUrl } from '../../server/app-url.js';
 import { transaction } from '../../server/db.js';
-import { sendConfirmationEmail } from '../../server/email.js';
+import { sendConfirmationEmail, toEmailHttpError } from '../../server/email.js';
+import { authTestMode, logApiDiagnostic } from '../../server/diagnostics.js';
 import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../server/http.js';
 import { enforceRateLimit } from '../../server/rate-limit.js';
 
@@ -10,6 +11,11 @@ const ROLES = new Set(['athlete', 'organizer']);
 export default async function handler(request, response) {
   try {
     method(request, ['POST']);
+    logApiDiagnostic('/api/auth/register', { method: request.method });
+    const testMode = authTestMode();
+    if (testMode) {
+      console.warn('ChipBelem AUTH_TEST_MODE ativo: cadastro pode retornar devConfirmationUrl. Nao use em producao real.');
+    }
     assertSameOrigin(request);
     const data = body(request);
     const role = ROLES.has(data.role) ? data.role : 'athlete';
@@ -103,23 +109,46 @@ export default async function handler(request, response) {
       return { id: userId, name, email, role };
     });
 
-    try {
-      await sendConfirmationEmail({
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        confirmationUrl: confirmationUrl(request, verification.token)
-      });
-    } catch {
-      throw new HttpError(502, 'Conta criada, mas o e-mail nao foi entregue. Use a opcao de reenviar confirmacao.', 'email_delivery_failed');
+    const devConfirmationUrl = confirmationUrl(request, verification.token);
+    let emailWarning = false;
+    let emailWarningMessage = '';
+    const emailConfigured = Boolean(String(process.env.RESEND_API_KEY || '').trim() && String(process.env.MAIL_FROM || '').trim());
+
+    if (testMode && !emailConfigured) {
+      emailWarning = true;
+      emailWarningMessage = 'E-mail nao enviado porque RESEND_API_KEY ou MAIL_FROM nao estao configurados.';
+      console.warn('ChipBelem AUTH_TEST_MODE: e-mail ignorado por falta de configuracao do Resend.');
+    } else {
+      try {
+        await sendConfirmationEmail({
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          confirmationUrl: devConfirmationUrl
+        });
+      } catch (error) {
+        const httpError = toEmailHttpError(error);
+        httpError.message = `Conta criada, mas o e-mail nao foi entregue. ${httpError.message}`;
+        if (!testMode) throw httpError;
+
+        emailWarning = true;
+        emailWarningMessage = httpError.message;
+        console.warn('ChipBelem AUTH_TEST_MODE: falha no envio, retornando devConfirmationUrl.', {
+          code: httpError.code,
+          status: httpError.status
+        });
+      }
     }
 
     json(response, 201, {
       ok: true,
       role,
-      message: role === 'organizer'
-        ? 'Confirme seu e-mail. Depois, o pedido sera analisado pela equipe.'
-        : 'Confira seu e-mail para ativar a conta.'
+      message: testMode
+        ? 'Conta criada em modo teste. Use o link de confirmacao retornado.'
+        : role === 'organizer'
+          ? 'Confirme seu e-mail. Depois, o pedido sera analisado pela equipe.'
+          : 'Confira seu e-mail para ativar a conta.',
+      ...(testMode ? { devConfirmationUrl, emailWarning, emailWarningMessage } : {})
     });
   } catch (error) {
     handleError(response, error);

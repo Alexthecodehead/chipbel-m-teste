@@ -1,13 +1,19 @@
 import { createVerificationToken, normalizeEmail, validEmail } from '../../server/auth.js';
 import { confirmationUrl } from '../../server/app-url.js';
 import { transaction } from '../../server/db.js';
-import { sendConfirmationEmail } from '../../server/email.js';
+import { sendConfirmationEmail, toEmailHttpError } from '../../server/email.js';
+import { authTestMode, logApiDiagnostic } from '../../server/diagnostics.js';
 import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../server/http.js';
 import { enforceRateLimit } from '../../server/rate-limit.js';
 
 export default async function handler(request, response) {
   try {
     method(request, ['POST']);
+    logApiDiagnostic('/api/auth/resend', { method: request.method });
+    const testMode = authTestMode();
+    if (testMode) {
+      console.warn('ChipBelem AUTH_TEST_MODE ativo: reenvio pode retornar devConfirmationUrl. Nao use em producao real.');
+    }
     assertSameOrigin(request);
     const email = normalizeEmail(body(request).email);
     if (!validEmail(email)) throw new HttpError(400, 'Informe um e-mail valido.', 'invalid_input');
@@ -32,15 +38,34 @@ export default async function handler(request, response) {
     });
 
     if (user) {
-      try {
-        await sendConfirmationEmail({
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          confirmationUrl: confirmationUrl(request, verification.token)
+      const devConfirmationUrl = confirmationUrl(request, verification.token);
+      const emailConfigured = Boolean(String(process.env.RESEND_API_KEY || '').trim() && String(process.env.MAIL_FROM || '').trim());
+      if (testMode && !emailConfigured) {
+        console.warn('ChipBelem AUTH_TEST_MODE: reenvio ignorou e-mail por falta de configuracao do Resend.');
+      } else {
+        try {
+          await sendConfirmationEmail({
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            confirmationUrl: devConfirmationUrl
+          });
+        } catch (error) {
+          const httpError = toEmailHttpError(error);
+          if (!testMode) throw httpError;
+          console.warn('ChipBelem AUTH_TEST_MODE: falha no reenvio, retornando devConfirmationUrl.', {
+            code: httpError.code,
+            status: httpError.status
+          });
+        }
+      }
+      if (testMode) {
+        json(response, 200, {
+          ok: true,
+          message: 'Novo link criado em modo teste. Use o link de confirmacao retornado.',
+          devConfirmationUrl
         });
-      } catch {
-        throw new HttpError(502, 'Nao foi possivel enviar o e-mail agora. Tente novamente em alguns minutos.', 'email_delivery_failed');
+        return;
       }
     }
 

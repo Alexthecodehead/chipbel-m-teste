@@ -1,11 +1,13 @@
 import { normalizeEmail, publicUser, setSessionCookie, verifyPassword } from '../../server/auth.js';
 import { query } from '../../server/db.js';
+import { logApiDiagnostic } from '../../server/diagnostics.js';
 import { assertSameOrigin, body, handleError, HttpError, json, method } from '../../server/http.js';
 import { clearRateLimit, enforceRateLimit } from '../../server/rate-limit.js';
 
 export default async function handler(request, response) {
   try {
     method(request, ['POST']);
+    logApiDiagnostic('/api/auth/login', { method: request.method });
     assertSameOrigin(request);
     const data = body(request);
     const rawLogin = String(data.login || '').trim().slice(0, 254);

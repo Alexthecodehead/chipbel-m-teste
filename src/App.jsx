@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { IS_FRONTEND_ONLY, apiUrl, authSiteUrl, frontendOnlyError } from './config.js';
 import { DEMO_USER, EVENTS, SHIRT_SIZES } from './data.js';
 
 const CONTACT_EMAIL = 'Alexandre.duraes.soares@gmail.com';
@@ -16,9 +17,12 @@ const assetUrl = (path = '') => {
   return `${import.meta.env.BASE_URL}${value.replace(/^\/+/, '')}`;
 };
 const apiRequest = async (path, options = {}) => {
+  if (IS_FRONTEND_ONLY && String(path).startsWith('/api/')) {
+    throw frontendOnlyError();
+  }
   let response;
   try {
-    response = await fetch(path, {
+    response = await fetch(apiUrl(path), {
       credentials: 'include',
       ...options,
       headers: options.body ? { 'Content-Type': 'application/json', ...(options.headers || {}) } : options.headers
@@ -142,6 +146,7 @@ function Layout({ athlete, organizer, onAthleteLogout, children }) {
           </div>
         </div>
       </header>
+      <BackendModeNotice />
       {children}
       <footer className="footer">
         <div className="container footer-grid">
@@ -190,6 +195,18 @@ function Layout({ athlete, organizer, onAthleteLogout, children }) {
         </div>
       </footer>
     </>
+  );
+}
+
+function BackendModeNotice({ compact = false }) {
+  if (!IS_FRONTEND_ONLY) return null;
+  const target = authSiteUrl(`${currentPage()}${window.location.search || ''}`);
+  return (
+    <div className={`backend-mode-notice ${compact ? 'compact' : ''}`}>
+      <strong>Ambiente estatico</strong>
+      <span>Login, cadastro, sessao e e-mail precisam ser testados na URL da Vercel.</span>
+      {target && <a href={target}>Abrir ambiente correto</a>}
+    </div>
   );
 }
 
@@ -555,9 +572,12 @@ function AuthPage({ type, athlete, setAthlete, setOrganizer, toast }) {
         method: 'POST',
         body: JSON.stringify({ email: resendEmail })
       });
-      setConfirmationNotice(data.message);
+      setConfirmationNotice(data.devConfirmationUrl ? `${data.message} ${data.devConfirmationUrl}` : data.message);
       toast('Novo link de confirmacao solicitado.');
     } catch (error) {
+      if (['frontend_only', 'email_delivery_failed', 'email_provider_not_configured', 'mail_from_missing', 'mail_from_invalid', 'mail_from_unverified_domain', 'email_forbidden', 'app_url_invalid', 'app_url_missing'].includes(error.code)) {
+        setConfirmationNotice(error.message);
+      }
       toast(error.message);
     } finally {
       setSending(false);
@@ -602,7 +622,7 @@ function AuthPage({ type, athlete, setAthlete, setOrganizer, toast }) {
         toast('Perfil atualizado.');
         setTimeout(() => { window.location.href = 'minhas-inscricoes.html'; }, 500);
       } else {
-        await apiRequest('/api/auth/register', {
+        const data = await apiRequest('/api/auth/register', {
           method: 'POST',
           body: JSON.stringify({
             role: accountType,
@@ -615,14 +635,18 @@ function AuthPage({ type, athlete, setAthlete, setOrganizer, toast }) {
           })
         });
         setResendEmail(email);
-        setConfirmationNotice(accountType === 'organizer'
-          ? 'Enviamos o link de confirmacao. Depois de confirmar o e-mail, seu pedido sera analisado pela equipe.'
-          : 'Enviamos um link de confirmacao. Abra a mensagem para ativar sua conta.');
-        toast('E-mail de confirmacao enviado.');
+        setConfirmationNotice(data.devConfirmationUrl
+          ? `${data.message} ${data.devConfirmationUrl}`
+          : accountType === 'organizer'
+            ? 'Enviamos o link de confirmacao. Depois de confirmar o e-mail, seu pedido sera analisado pela equipe.'
+            : 'Enviamos um link de confirmacao. Abra a mensagem para ativar sua conta.');
+        toast(data.devConfirmationUrl && data.emailWarning ? 'Link de teste criado.' : 'E-mail de confirmacao enviado.');
         e.currentTarget.reset();
       }
     } catch (error) {
-      if (error.code === 'email_unverified' || error.code === 'email_delivery_failed') {
+      if (error.code === 'frontend_only') {
+        setConfirmationNotice(error.message);
+      } else if (error.code === 'email_unverified' || error.code === 'email_delivery_failed' || error.code === 'email_provider_not_configured' || error.code === 'mail_from_missing' || error.code === 'mail_from_invalid' || error.code === 'mail_from_unverified_domain' || error.code === 'email_forbidden' || error.code === 'app_url_invalid' || error.code === 'app_url_missing') {
         setResendEmail(email);
         setConfirmationNotice(error.message);
       } else if (error.code === 'approval_pending') {
@@ -655,6 +679,7 @@ function AuthPage({ type, athlete, setAthlete, setOrganizer, toast }) {
             <button className={accountType === 'organizer' ? 'active' : ''} type="button" onClick={() => setAccountType('organizer')} disabled={sending}>Organizador</button>
           </div>}
           <div className="auth-card-head"><span>{isLogin ? 'Login' : 'Cadastro'}</span><h2>{isLogin ? 'Bem-vindo de volta' : 'Dados da conta'}</h2><p>Informe seus dados para acessar o perfil correto.</p></div>
+          <BackendModeNotice compact />
           {confirmationNotice && <div className="auth-alert"><strong>Situação da conta</strong><p>{confirmationNotice}</p></div>}
           {confirmationNotice && resendEmail && <button className="auth-resend" type="button" onClick={resendConfirmation} disabled={sending}>Reenviar e-mail de confirmacao</button>}
           <div className="form-grid">
@@ -699,7 +724,11 @@ function ConfirmEmailPage({ setAthlete, setOrganizer }) {
       setStatus({ type: 'success', title: data.user ? 'Conta ativada' : 'E-mail confirmado', message: data.message, next: data.next });
       redirectTimer = window.setTimeout(() => { window.location.href = data.next; }, 2200);
     }).catch((error) => {
-      setStatus({ type: 'error', title: 'Link expirado ou já utilizado', message: error.message });
+      setStatus({
+        type: 'error',
+        title: error.code === 'frontend_only' ? 'Abra pela Vercel' : 'Link expirado ou ja utilizado',
+        message: error.message
+      });
     });
     return () => window.clearTimeout(redirectTimer);
   }, [setAthlete, setOrganizer]);
@@ -708,6 +737,7 @@ function ConfirmEmailPage({ setAthlete, setOrganizer }) {
       <section className={`card confirm-card ${status.type}`}>
         <h2>{status.title}</h2>
         <p>{status.message}</p>
+        <BackendModeNotice compact />
         <div className="hero-actions" style={{ justifyContent: 'center' }}>
           <a className="btn btn-primary" href={status.next || 'login.html'}>{status.next?.startsWith('admin') ? 'Ir para o painel' : status.next?.startsWith('organizador') ? 'Acompanhar cadastro' : 'Ir para área do atleta'}</a>
           <a className="btn btn-outline" href="eventos.html">Ver eventos</a>
@@ -994,7 +1024,7 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
       toast(data.user.role === 'admin' ? 'Login do admin realizado.' : 'Login do organizador realizado.');
       setTimeout(() => { window.location.href = 'admin.html'; }, 450);
     } catch (error) {
-      if (error.code === 'email_unverified' || error.code === 'approval_pending') setAuthNotice(error.message);
+      if (['frontend_only', 'email_unverified', 'approval_pending'].includes(error.code)) setAuthNotice(error.message);
       toast(error.message);
     } finally {
       setSending(false);
@@ -1015,9 +1045,10 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
         })
       });
       e.currentTarget.reset();
-      setAuthNotice(data.message);
-      toast('Cadastro recebido. Confirme seu e-mail.');
+      setAuthNotice(data.devConfirmationUrl ? `${data.message} ${data.devConfirmationUrl}` : data.message);
+      toast(data.devConfirmationUrl ? 'Link de teste criado.' : 'Cadastro recebido. Confirme seu e-mail.');
     } catch (error) {
+      if (['frontend_only', 'email_delivery_failed', 'email_provider_not_configured', 'mail_from_missing', 'mail_from_invalid', 'mail_from_unverified_domain', 'email_forbidden', 'app_url_invalid', 'app_url_missing'].includes(error.code)) setAuthNotice(error.message);
       toast(error.message);
     } finally {
       setSending(false);
@@ -1034,6 +1065,7 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
             <div className="organizer-login-card" id="organizerAccess">
               <img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" />
               <div className="organizer-auth-tabs"><button className={authMode === 'login' ? 'active' : ''} type="button" onClick={() => setAuthMode('login')}>Login</button><button className={authMode === 'signup' ? 'active' : ''} type="button" onClick={() => setAuthMode('signup')}>Cadastro</button></div>
+              <BackendModeNotice compact />
               {authNotice && <div className="auth-alert"><strong>Situação da conta</strong><p>{authNotice}</p></div>}
               {authMode === 'login' ? <form onSubmit={submitLogin}><h2>Login do organizador</h2><div className="field"><label>Login ou e-mail</label><input className="input" name="login" type="text" placeholder="Admin ou organizador@email.com" autoComplete="username" required /></div><div className="field"><label>Senha</label><input className="input" name="password" type="password" maxLength="128" placeholder="••••••••••••" autoComplete="current-password" required /></div><button className="btn btn-primary btn-block" type="submit" disabled={sending}>{sending ? 'Entrando...' : 'Entrar no painel'}</button></form> : <form onSubmit={submitSignup}><h2>Solicitar conta de organizador</h2><div className="field"><label>Nome da empresa</label><input className="input" name="company" maxLength="180" placeholder="Nome da organização" required /></div><div className="field"><label>Responsável</label><input className="input" name="name" maxLength="160" placeholder="Seu nome" required /></div><div className="field"><label>E-mail</label><input className="input" name="email" type="email" maxLength="254" placeholder="organizador@email.com" required /></div><div className="field"><label>Senha</label><input className="input" name="password" type="password" minLength="12" maxLength="128" placeholder="••••••••••••" autoComplete="new-password" required /></div><button className="btn btn-primary btn-block" type="submit" disabled={sending}>{sending ? 'Enviando...' : 'Enviar pedido'}</button></form>}
             </div>
@@ -1177,6 +1209,10 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState('');
   const page = currentPage();
   useEffect(() => {
+    if (IS_FRONTEND_ONLY) {
+      setPublicEvents(EVENTS);
+      return undefined;
+    }
     let active = true;
     apiRequest('/api/events').then((data) => {
       if (!active) return;
@@ -1189,6 +1225,12 @@ export default function App() {
     return () => { active = false; };
   }, []);
   useEffect(() => {
+    if (IS_FRONTEND_ONLY) {
+      setAthlete(null);
+      setOrganizer(null);
+      setAuthLoading(false);
+      return undefined;
+    }
     let active = true;
     apiRequest('/api/auth/session').then(async ({ user }) => {
       if (!active || !user) return;

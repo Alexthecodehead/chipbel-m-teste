@@ -30,15 +30,31 @@ export function assertSameOrigin(request) {
   const origin = request.headers.origin;
   if (!origin) return;
 
-  const host = request.headers['x-forwarded-host'] || request.headers.host;
-  let originHost;
+  let originUrl;
   try {
-    originHost = new URL(origin).host;
+    originUrl = new URL(origin);
   } catch {
     throw new HttpError(403, 'Origem invalida.', 'invalid_origin');
   }
 
-  if (!host || originHost !== host) {
+  const forwardedProto = String(request.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const proto = forwardedProto || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const hosts = [request.headers['x-forwarded-host'], request.headers.host]
+    .filter(Boolean)
+    .map(value => String(value).split(',')[0].trim());
+  const allowedOrigins = new Set(hosts.map(host => `${proto}://${host}`));
+
+  const configuredAppUrl = String(process.env.APP_URL || '').trim();
+  if (configuredAppUrl) {
+    try {
+      const configured = new URL(configuredAppUrl);
+      if (!configured.hostname.endsWith('github.io')) allowedOrigins.add(configured.origin);
+    } catch {
+      // APP_URL is validated by app-url.js when it is needed.
+    }
+  }
+
+  if (!allowedOrigins.size || !allowedOrigins.has(originUrl.origin)) {
     throw new HttpError(403, 'Origem nao autorizada.', 'invalid_origin');
   }
 }

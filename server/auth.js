@@ -16,7 +16,9 @@ const base64url = (value) => Buffer.from(value).toString('base64url');
 
 function sessionSecret() {
   const secret = String(process.env.SESSION_SECRET || '');
-  if (secret.length < 32) throw new Error('SESSION_SECRET deve ter pelo menos 32 caracteres.');
+  if (secret.length < 32) {
+    throw new HttpError(500, 'SESSION_SECRET deve ter pelo menos 32 caracteres.', 'session_secret_invalid');
+  }
   return secret;
 }
 
