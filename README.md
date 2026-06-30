@@ -5,7 +5,7 @@ Plataforma React/Vite para eventos esportivos, inscricoes, area do atleta, organ
 ## Arquitetura
 
 - React + Vite no frontend
-- Uma funcao serverless catch-all em `api/[...route].js`
+- Uma funcao serverless unica em `api/index.js`
 - Handlers internos em `server/routes/`
 - PostgreSQL para usuarios, perfis, aprovacoes, eventos, inscricoes e resultados
 - Senhas com scrypt nativo do Node e salt aleatorio
@@ -19,8 +19,10 @@ Os eventos antigos de `src/data.js` continuam como catalogo demonstrativo. Novos
 O plano Hobby da Vercel limita a quantidade de Serverless Functions por deploy. Por isso, as URLs publicas continuam as mesmas, mas todas passam por uma unica funcao:
 
 ```text
-api/[...route].js
+api/index.js
 ```
+
+O `vercel.json` reescreve `/api/:path*` para `/api/index?route=:path*`, permitindo que rotas profundas como `/api/auth/session` cheguem na mesma funcao.
 
 Exemplos que continuam funcionando:
 
@@ -114,12 +116,21 @@ Nao configure `ADMIN_PASSWORD` na Vercel. A senha existe apenas como hash no Pos
 
 Depois das variaveis, faca um novo deploy.
 
-Para este projeto em producao, use:
+Checklist recomendado para este projeto em Production:
 
 ```text
+DATABASE_URL=postgresql://...
+DATABASE_POOL_SIZE=5
+SESSION_SECRET=uma-chave-grande-com-mais-de-32-caracteres
 APP_URL=https://chipbel-m-teste.vercel.app/
+AUTH_TEST_MODE=true
+MAIL_FROM=ChipBelem <onboarding@resend.dev>
+RESEND_API_KEY=re_...
 VITE_AUTH_SITE_URL=https://chipbel-m-teste.vercel.app/
+VITE_FRONTEND_ONLY=false
 ```
+
+Nao coloque secrets em variaveis `VITE_*`. Se nao houver banco PostgreSQL configurado ou migrations aplicadas, cadastro e eventos nao funcionarao.
 
 Nao use URLs de deployment especifico da Vercel, como `chipbel-m-teste-xxxxx-alexandre-the-codehead.vercel.app`, em `APP_URL` ou testes publicos. Elas podem mudar e nao devem aparecer nos e-mails de confirmacao.
 

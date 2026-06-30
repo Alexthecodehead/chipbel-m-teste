@@ -40,28 +40,59 @@ const staticRoutes = new Map([
 
 function routePath(request) {
   const host = request.headers.host || '127.0.0.1';
-  const pathname = new URL(request.url || '/', `http://${host}`).pathname.replace(/\/+$/, '') || '/';
+  const url = new URL(request.url || '/', `http://${host}`);
+  const rewrittenRoute = url.searchParams.get('route');
+  if (rewrittenRoute) {
+    return `/api/${String(rewrittenRoute).replace(/^\/+/, '').replace(/\/+$/, '')}`;
+  }
+
+  const pathname = url.pathname.replace(/\/+$/, '') || '/';
   return pathname.startsWith('/api/') || pathname === '/api' ? pathname : `/api${pathname}`;
 }
 
+function requestUrl(request) {
+  try {
+    const host = request.headers.host || '127.0.0.1';
+    return new URL(request.url || '/', `http://${host}`);
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(request, response) {
+  const url = requestUrl(request);
   const path = routePath(request);
+  const route = url?.searchParams.get('route') || '';
+
+  const logRoute = (found) => {
+    console.info('ChipBelem API router', {
+      method: request.method,
+      url: request.url || '',
+      path,
+      route,
+      found
+    });
+  };
 
   if (path === '/api/health') {
+    logRoute(true);
     json(response, 200, { ok: true, message: 'API funcionando' });
     return;
   }
 
   if (/^\/api\/organizer\/events\/[^/]+$/.test(path)) {
+    logRoute(true);
     await organizerEventByIdHandler(request, response);
     return;
   }
 
   const routeHandler = staticRoutes.get(path);
   if (routeHandler) {
+    logRoute(true);
     await routeHandler(request, response);
     return;
   }
 
+  logRoute(false);
   json(response, 404, { error: 'Rota nao encontrada.', code: 'not_found' });
 }

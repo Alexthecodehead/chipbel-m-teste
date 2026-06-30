@@ -659,6 +659,20 @@ button { cursor: pointer; }
 .auth-alert strong, .auth-alert a { display:block; }
 .auth-alert p { color:#166534; margin:4px 0 0; overflow-wrap:anywhere; }
 .auth-alert a { margin-top:8px; color:#15803d; font-weight:800; word-break:break-all; }
+.auth-confirm-now {
+  width: fit-content;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #16a34a;
+  color: #fff !important;
+  text-decoration: none;
+}
+.auth-diagnostic {
+  display:block;
+  margin-top:10px;
+  color:#64748b;
+  font-weight:800;
+}
 .auth-resend {
   width:100%;
   margin:-8px 0 18px;

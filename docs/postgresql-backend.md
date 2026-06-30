@@ -54,7 +54,7 @@ SELECT * FROM events;
 
 ## APIs implementadas
 
-Todas as URLs abaixo passam por `api/[...route].js`, a unica Serverless Function publica. Os handlers internos ficam em `server/routes/`.
+Todas as URLs abaixo passam por `api/index.js`, a unica Serverless Function publica. O `vercel.json` reescreve `/api/:path*` para `/api/index?route=:path*`. Os handlers internos ficam em `server/routes/`.
 
 - `GET /api/health`
 - `POST /api/auth/login`

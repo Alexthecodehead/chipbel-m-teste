@@ -563,6 +563,8 @@ function AuthPage({ type, athlete, setAthlete, setOrganizer, toast }) {
   const [accountType, setAccountType] = useState('athlete');
   const [sending, setSending] = useState(false);
   const [confirmationNotice, setConfirmationNotice] = useState('');
+  const [confirmationLink, setConfirmationLink] = useState('');
+  const [diagnosticCode, setDiagnosticCode] = useState('');
   const [resendEmail, setResendEmail] = useState('');
   const resendConfirmation = async () => {
     if (!resendEmail || sending) return;
@@ -572,10 +574,16 @@ function AuthPage({ type, athlete, setAthlete, setOrganizer, toast }) {
         method: 'POST',
         body: JSON.stringify({ email: resendEmail })
       });
-      setConfirmationNotice(data.devConfirmationUrl ? `${data.message} ${data.devConfirmationUrl}` : data.message);
+      setConfirmationNotice(data.message);
+      setConfirmationLink(data.devConfirmationUrl || '');
+      setDiagnosticCode('');
       toast('Novo link de confirmacao solicitado.');
     } catch (error) {
+      setConfirmationLink('');
+      setDiagnosticCode(error.code || '');
       if (['frontend_only', 'email_delivery_failed', 'email_provider_not_configured', 'mail_from_missing', 'mail_from_invalid', 'mail_from_unverified_domain', 'email_forbidden', 'app_url_invalid', 'app_url_missing'].includes(error.code)) {
+        setConfirmationNotice(error.message);
+      } else {
         setConfirmationNotice(error.message);
       }
       toast(error.message);
@@ -590,6 +598,8 @@ function AuthPage({ type, athlete, setAthlete, setOrganizer, toast }) {
     const password = String(form.get('password') || '');
     setSending(true);
     setConfirmationNotice('');
+    setConfirmationLink('');
+    setDiagnosticCode('');
     try {
       if (isLogin) {
         const data = await apiRequest('/api/auth/login', {
@@ -635,8 +645,9 @@ function AuthPage({ type, athlete, setAthlete, setOrganizer, toast }) {
           })
         });
         setResendEmail(email);
+        setConfirmationLink(data.devConfirmationUrl || '');
         setConfirmationNotice(data.devConfirmationUrl
-          ? `${data.message} ${data.devConfirmationUrl}`
+          ? data.message
           : accountType === 'organizer'
             ? 'Enviamos o link de confirmacao. Depois de confirmar o e-mail, seu pedido sera analisado pela equipe.'
             : 'Enviamos um link de confirmacao. Abra a mensagem para ativar sua conta.');
@@ -644,6 +655,8 @@ function AuthPage({ type, athlete, setAthlete, setOrganizer, toast }) {
         e.currentTarget.reset();
       }
     } catch (error) {
+      setConfirmationLink('');
+      setDiagnosticCode(error.code || '');
       if (error.code === 'frontend_only') {
         setConfirmationNotice(error.message);
       } else if (error.code === 'email_unverified' || error.code === 'email_delivery_failed' || error.code === 'email_provider_not_configured' || error.code === 'mail_from_missing' || error.code === 'mail_from_invalid' || error.code === 'mail_from_unverified_domain' || error.code === 'email_forbidden' || error.code === 'app_url_invalid' || error.code === 'app_url_missing') {
@@ -651,6 +664,8 @@ function AuthPage({ type, athlete, setAthlete, setOrganizer, toast }) {
         setConfirmationNotice(error.message);
       } else if (error.code === 'approval_pending') {
         setConfirmationNotice('Seu e-mail ja foi confirmado. A conta de organizador ainda aguarda aprovacao da equipe.');
+      } else {
+        setConfirmationNotice(error.message);
       }
       toast(error.message);
     } finally {
@@ -680,7 +695,12 @@ function AuthPage({ type, athlete, setAthlete, setOrganizer, toast }) {
           </div>}
           <div className="auth-card-head"><span>{isLogin ? 'Login' : 'Cadastro'}</span><h2>{isLogin ? 'Bem-vindo de volta' : 'Dados da conta'}</h2><p>Informe seus dados para acessar o perfil correto.</p></div>
           <BackendModeNotice compact />
-          {confirmationNotice && <div className="auth-alert"><strong>Situação da conta</strong><p>{confirmationNotice}</p></div>}
+          {confirmationNotice && <div className="auth-alert">
+            <strong>Situação da conta</strong>
+            <p>{confirmationNotice}</p>
+            {confirmationLink && <a className="auth-confirm-now" href={confirmationLink}>Confirmar conta agora</a>}
+            {diagnosticCode && <small className="auth-diagnostic">Codigo: {diagnosticCode}</small>}
+          </div>}
           {confirmationNotice && resendEmail && <button className="auth-resend" type="button" onClick={resendConfirmation} disabled={sending}>Reenviar e-mail de confirmacao</button>}
           <div className="form-grid">
             {!isLogin && <div className="field full"><label>Nome completo</label><input className="input" name="name" required placeholder="Seu nome" defaultValue={athlete?.name || ''} /></div>}
@@ -1008,6 +1028,8 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
   const [authMode, setAuthMode] = useState('login');
   const [sending, setSending] = useState(false);
   const [authNotice, setAuthNotice] = useState('');
+  const [authLink, setAuthLink] = useState('');
+  const [authDiagnostic, setAuthDiagnostic] = useState('');
   const submitLogin = async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -1015,6 +1037,8 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
     const password = String(form.get('password') || '');
     setSending(true);
     setAuthNotice('');
+    setAuthLink('');
+    setAuthDiagnostic('');
     try {
       const data = await apiRequest('/api/auth/login', {
         method: 'POST',
@@ -1024,7 +1048,9 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
       toast(data.user.role === 'admin' ? 'Login do admin realizado.' : 'Login do organizador realizado.');
       setTimeout(() => { window.location.href = 'admin.html'; }, 450);
     } catch (error) {
+      setAuthDiagnostic(error.code || '');
       if (['frontend_only', 'email_unverified', 'approval_pending'].includes(error.code)) setAuthNotice(error.message);
+      else setAuthNotice(error.message);
       toast(error.message);
     } finally {
       setSending(false);
@@ -1034,6 +1060,9 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     setSending(true);
+    setAuthNotice('');
+    setAuthLink('');
+    setAuthDiagnostic('');
     try {
       const data = await apiRequest('/api/organizer-requests', {
         method: 'POST',
@@ -1045,10 +1074,14 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
         })
       });
       e.currentTarget.reset();
-      setAuthNotice(data.devConfirmationUrl ? `${data.message} ${data.devConfirmationUrl}` : data.message);
+      setAuthNotice(data.message);
+      setAuthLink(data.devConfirmationUrl || '');
       toast(data.devConfirmationUrl ? 'Link de teste criado.' : 'Cadastro recebido. Confirme seu e-mail.');
     } catch (error) {
+      setAuthLink('');
+      setAuthDiagnostic(error.code || '');
       if (['frontend_only', 'email_delivery_failed', 'email_provider_not_configured', 'mail_from_missing', 'mail_from_invalid', 'mail_from_unverified_domain', 'email_forbidden', 'app_url_invalid', 'app_url_missing'].includes(error.code)) setAuthNotice(error.message);
+      else setAuthNotice(error.message);
       toast(error.message);
     } finally {
       setSending(false);
@@ -1066,7 +1099,12 @@ function OrganizerPage({ organizer, setOrganizer, organizerEvents, setOrganizerE
               <img src={assetUrl('assets/logo_chip.png')} alt="ChipBelem" />
               <div className="organizer-auth-tabs"><button className={authMode === 'login' ? 'active' : ''} type="button" onClick={() => setAuthMode('login')}>Login</button><button className={authMode === 'signup' ? 'active' : ''} type="button" onClick={() => setAuthMode('signup')}>Cadastro</button></div>
               <BackendModeNotice compact />
-              {authNotice && <div className="auth-alert"><strong>Situação da conta</strong><p>{authNotice}</p></div>}
+              {authNotice && <div className="auth-alert">
+                <strong>Situação da conta</strong>
+                <p>{authNotice}</p>
+                {authLink && <a className="auth-confirm-now" href={authLink}>Confirmar conta agora</a>}
+                {authDiagnostic && <small className="auth-diagnostic">Codigo: {authDiagnostic}</small>}
+              </div>}
               {authMode === 'login' ? <form onSubmit={submitLogin}><h2>Login do organizador</h2><div className="field"><label>Login ou e-mail</label><input className="input" name="login" type="text" placeholder="Admin ou organizador@email.com" autoComplete="username" required /></div><div className="field"><label>Senha</label><input className="input" name="password" type="password" maxLength="128" placeholder="••••••••••••" autoComplete="current-password" required /></div><button className="btn btn-primary btn-block" type="submit" disabled={sending}>{sending ? 'Entrando...' : 'Entrar no painel'}</button></form> : <form onSubmit={submitSignup}><h2>Solicitar conta de organizador</h2><div className="field"><label>Nome da empresa</label><input className="input" name="company" maxLength="180" placeholder="Nome da organização" required /></div><div className="field"><label>Responsável</label><input className="input" name="name" maxLength="160" placeholder="Seu nome" required /></div><div className="field"><label>E-mail</label><input className="input" name="email" type="email" maxLength="254" placeholder="organizador@email.com" required /></div><div className="field"><label>Senha</label><input className="input" name="password" type="password" minLength="12" maxLength="128" placeholder="••••••••••••" autoComplete="new-password" required /></div><button className="btn btn-primary btn-block" type="submit" disabled={sending}>{sending ? 'Enviando...' : 'Enviar pedido'}</button></form>}
             </div>
           )}
